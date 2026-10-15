@@ -15,6 +15,14 @@ import {
 } from "../lib/api";
 import {createSaver, type SaveStatus} from "../lib/saver";
 import {createChangeFilter} from "../lib/changeFilter";
+import {
+	DEFAULT_SETTINGS,
+	buildCardConfig,
+	listSnippets,
+	loadSiteSettings,
+	type SiteSettings,
+	type Snippet,
+} from "../lib/cardConfig";
 import {makeFileUploader} from "../lib/uploader";
 import {
 	canPublishRole,
@@ -88,6 +96,8 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	const [lexical, setLexical] = useState<string>("");
 
 	const [editorError, setEditorError] = useState<string | null>(null);
+	const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
+	const [snippets, setSnippets] = useState<Snippet[]>([]);
 
 	const saverRef = useRef<ReturnType<typeof createSaver> | null>(null);
 	const changeFilterRef = useRef(createChangeFilter());
@@ -156,16 +166,48 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		};
 	}, [site, postId, bindPost]);
 
+	const refreshSnippets = useCallback(() => {
+		if (site.keyKind === "staff") {
+			listSnippets(site).then(setSnippets);
+		}
+	}, [site]);
+
+	// Card-config data arrives after the editor mounts; cardConfig only lives
+	// in Koenig's context, so updating it does not remount the editor.
+	useEffect(() => {
+		let cancelled = false;
+		setSettings(DEFAULT_SETTINGS);
+		setSnippets([]);
+		loadSiteSettings(site).then(s => {
+			if (!cancelled) {
+				setSettings(s);
+			}
+		});
+		if (site.keyKind === "staff") {
+			listSnippets(site).then(list => {
+				if (!cancelled) {
+					setSnippets(list);
+				}
+			});
+		}
+		return () => {
+			cancelled = true;
+		};
+	}, [site]);
+
 	const fileUploader = useMemo(() => makeFileUploader(site), [site]);
 
 	const cardConfig = useMemo(
 		() => ({
-			siteUrl: site.siteUrl,
-			siteTitle: site.title,
+			...buildCardConfig(site, {
+				settings,
+				snippets,
+				onSnippetsChanged: refreshSnippets,
+			}),
 			fetchEmbed: (url: string, {type}: {type: string}) =>
 				fetchEmbed(site, url, type),
 		}),
-		[site],
+		[site, settings, snippets, refreshSnippets],
 	);
 
 	const handleBody = useCallback((state: unknown) => {
