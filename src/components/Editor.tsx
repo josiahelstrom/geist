@@ -641,6 +641,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 						>
 							<KoenigComposer
 								initialEditorState={post.lexical}
+								darkMode={document.documentElement.classList.contains("dark")}
 								fileUploader={fileUploader}
 								cardConfig={cardConfig}
 								onError={handleEditorError}

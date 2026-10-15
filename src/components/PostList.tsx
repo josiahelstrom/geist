@@ -1,3 +1,4 @@
+import ThemeToggle from "./ThemeToggle";
 import {useCallback, useEffect, useMemo, useState} from "react";
 import {
 	GhostError,
@@ -149,6 +150,7 @@ export default function PostList({
 					{site.role ? ` · ${site.role}` : ""}
 				</span>
 				<div className="spacer" />
+				<ThemeToggle />
 				<button type="button" onClick={load} title="Refresh post list">
 					↻
 				</button>
