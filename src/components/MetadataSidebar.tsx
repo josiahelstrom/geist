@@ -10,6 +10,7 @@ import {
 	MAX_FEATURE_IMAGE_ALT_LENGTH,
 	canEditAuthorsRole,
 	openPostInAdmin,
+	serializeTagsForSave,
 } from "../lib/posts";
 import {urlFromUploadResponse} from "../lib/uploader";
 
@@ -137,18 +138,14 @@ export default function MetadataSidebar({
 		const nextTags = [...meta.tags, nextTag];
 		setTagInput("");
 		updateField("tags", nextTags, {
-			tags: nextTags.map(t =>
-				t.id ? {id: t.id, name: t.name, slug: t.slug} : {name: t.name},
-			),
+			tags: serializeTagsForSave(nextTags),
 		});
 	}
 
 	function handleRemoveTag(index: number) {
 		const nextTags = meta.tags.filter((_, i) => i !== index);
 		updateField("tags", nextTags, {
-			tags: nextTags.map(t =>
-				t.id ? {id: t.id, name: t.name, slug: t.slug} : {name: t.name},
-			),
+			tags: serializeTagsForSave(nextTags),
 		});
 	}
 

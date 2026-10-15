@@ -14,17 +14,20 @@ import {
 	type TagSummary,
 } from "../lib/api";
 import {createSaver, type SaveStatus} from "../lib/saver";
+import {createChangeFilter} from "../lib/changeFilter";
 import {makeFileUploader} from "../lib/uploader";
 import {
 	canPublishRole,
 	deletePost,
 	fetchEmbed,
 	openInAppPreview,
+	openPostInAdmin,
 	previewUrl,
 	setPostStatus,
 	type PreviewMemberStatus,
 } from "../lib/posts";
 import {versionBanner} from "../lib/version";
+import EditorErrorBoundary from "./EditorErrorBoundary";
 import MetadataSidebar, {type PostMetadataState} from "./MetadataSidebar";
 
 type Props = {
@@ -84,7 +87,11 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	const [publishing, setPublishing] = useState(false);
 	const [lexical, setLexical] = useState<string>("");
 
+	const [editorError, setEditorError] = useState<string | null>(null);
+
 	const saverRef = useRef<ReturnType<typeof createSaver> | null>(null);
+	const changeFilterRef = useRef(createChangeFilter());
+	const editorErrorRef = useRef(false);
 
 	const bindPost = useCallback(
 		(p: PostDetail) => {
@@ -95,6 +102,9 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 			setConflict(false);
 			setStatus("clean");
 			setStatusMessage(undefined);
+			setEditorError(null);
+			editorErrorRef.current = false;
+			changeFilterRef.current.reset();
 			saverRef.current = createSaver(site, p.id, p.updated_at, {
 				onStatus: (s, message) => {
 					setStatus(s);
@@ -159,9 +169,22 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	);
 
 	const handleBody = useCallback((state: unknown) => {
+		if (editorErrorRef.current) {
+			return; // the editor is in a failed state; never save its body
+		}
 		const next = JSON.stringify(state);
 		setLexical(next);
-		saverRef.current?.queueDebounced({lexical: next});
+		// Koenig emits onChange on mount; only genuine edits should save.
+		if (changeFilterRef.current.accept(next)) {
+			saverRef.current?.queueDebounced({lexical: next});
+		}
+	}, []);
+
+	const handleEditorError = useCallback((err: unknown) => {
+		editorErrorRef.current = true;
+		const message = err instanceof Error ? err.message : String(err);
+		queueMicrotask(() => setEditorError(message));
+		throw err; // keep Lexical's contract: onError must not swallow
 	}, []);
 
 	const handleTitle = useCallback((value: string) => {
@@ -230,6 +253,46 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 			unlisten?.();
 		};
 	}, []);
+
+	function markInteraction() {
+		changeFilterRef.current.markInteraction();
+	}
+
+	async function handleBack() {
+		const saver = saverRef.current;
+		if (saver) {
+			await saver.flush();
+			if (saver.hasPending) {
+				const leave = window.confirm(
+					"Your latest changes could not be saved.\n\nLeave anyway and discard them?",
+				);
+				if (!leave) {
+					return;
+				}
+				saver.halt();
+			}
+		}
+		onBack();
+	}
+
+	function renderEditorFallback(message: string) {
+		return (
+			<div className="error-banner" role="alert" data-testid="editor-fallback">
+				<span>
+					This post can't be shown in the editor (it may use content from a
+					newer Ghost). Your post has not been changed. Details: {message}
+				</span>
+				<div className="banner-actions">
+					<button
+						type="button"
+						onClick={() => post && openPostInAdmin(post.id, site)}
+					>
+						Open in Ghost Admin ↗
+					</button>
+				</div>
+			</div>
+		);
+	}
 
 	async function handleInAppPreview() {
 		if (!post) {
@@ -375,7 +438,9 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		<div className={sidebarOpen ? "editor-shell with-sidebar" : "editor-shell"}>
 			<div className="editor">
 				<header className="editor-header">
-					<button onClick={onBack}>← Posts</button>
+					<button onClick={handleBack} data-testid="back-button">
+						← Posts
+					</button>
 					<span className="muted">
 						{site.title} · <span className={`badge badge-${post.status}`}>{post.status}</span>
 					</span>
@@ -512,14 +577,40 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 				/>
 
 				{/* key forces a clean editor when switching posts or reloading from server */}
-				<KoenigComposer
-					key={`${post.id}-${editorVersion}`}
-					initialEditorState={post.lexical}
-					fileUploader={fileUploader}
-					cardConfig={cardConfig}
-				>
-					<KoenigEditor onChange={handleBody} placeholderText="Begin writing…" />
-				</KoenigComposer>
+				{editorError ? (
+					renderEditorFallback(editorError)
+				) : (
+					<EditorErrorBoundary
+						key={`${post.id}-${editorVersion}`}
+						fallback={renderEditorFallback}
+						onCatch={message => {
+							editorErrorRef.current = true;
+							setEditorError(message);
+						}}
+					>
+						<div
+							style={{display: "contents"}}
+							onKeyDownCapture={markInteraction}
+							onPointerDownCapture={markInteraction}
+							onPasteCapture={markInteraction}
+							onDropCapture={markInteraction}
+							onBeforeInputCapture={markInteraction}
+							onCompositionStartCapture={markInteraction}
+						>
+							<KoenigComposer
+								initialEditorState={post.lexical}
+								fileUploader={fileUploader}
+								cardConfig={cardConfig}
+								onError={handleEditorError}
+							>
+								<KoenigEditor
+									onChange={handleBody}
+									placeholderText="Begin writing…"
+								/>
+							</KoenigComposer>
+						</div>
+					</EditorErrorBoundary>
+				)}
 
 				<p className="muted small">
 					{lexical.length.toLocaleString()} characters · Cmd+S saves a revision
