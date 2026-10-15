@@ -38,9 +38,14 @@ export function parseSettings(list: RawSetting[]): SiteSettings {
 		typeof access === "string"
 			? access !== "none"
 			: get("members_enabled") === true;
+	// `paid_members_enabled` is a computed setting (Ghost's
+	// settings-service) and is authoritative; the connect account id is only a
+	// fallback for a server that does not expose it.
+	const paid = get("paid_members_enabled");
 	const stripeEnabled =
-		get("paid_members_enabled") === true ||
-		Boolean(get("stripe_connect_account_id"));
+		typeof paid === "boolean"
+			? paid
+			: Boolean(get("stripe_connect_account_id"));
 	const description = get("description");
 	return {
 		loaded: true,
@@ -88,9 +93,10 @@ function snippetValue(lexical: unknown): string | null {
 
 export async function listSnippets(site: Site): Promise<Snippet[]> {
 	try {
+		// Ghost returns only `mobiledoc` unless `formats` asks for lexical.
 		const res = await api<{snippets: RawSnippet[]}>(
 			site,
-			"/snippets/?limit=all",
+			"/snippets/?limit=all&formats=lexical",
 		);
 		const out: Snippet[] = [];
 		for (const s of res.snippets ?? []) {
@@ -112,6 +118,20 @@ export async function listSnippets(site: Site): Promise<Snippet[]> {
 	}
 }
 
+/**
+ * Ghost's snippets.add / snippets.edit schemas require `mobiledoc` (a JSON
+ * string) next to `name`, forbid any other field (so no `updated_at`), and
+ * treat `lexical` as optional. Lexical-only snippets therefore carry an empty
+ * mobiledoc document.
+ */
+export const EMPTY_MOBILEDOC = JSON.stringify({
+	version: "0.3.1",
+	atoms: [],
+	cards: [],
+	markups: [],
+	sections: [[1, "p", [[0, [], 0, ""]]]],
+});
+
 /** Creates a snippet, or updates the one with the same name (Koenig's "update"). */
 export async function saveSnippet(
 	site: Site,
@@ -126,8 +146,8 @@ export async function saveSnippet(
 				snippets: [
 					{
 						name: input.name,
+						mobiledoc: EMPTY_MOBILEDOC,
 						lexical: input.value,
-						...(match.updatedAt ? {updated_at: match.updatedAt} : {}),
 					},
 				],
 			}),
@@ -137,7 +157,9 @@ export async function saveSnippet(
 	await api(site, "/snippets/", {
 		method: "POST",
 		body: JSON.stringify({
-			snippets: [{name: input.name, lexical: input.value}],
+			snippets: [
+				{name: input.name, mobiledoc: EMPTY_MOBILEDOC, lexical: input.value},
+			],
 		}),
 	});
 }

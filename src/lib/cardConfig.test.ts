@@ -26,6 +26,7 @@ const {
 	searchLinks,
 	fetchAutocompleteLinks,
 	buildCardConfig,
+	EMPTY_MOBILEDOC,
 	DEFAULT_SETTINGS,
 } = await import("./cardConfig");
 
@@ -59,6 +60,15 @@ describe("settings", () => {
 		});
 	});
 
+	it("trusts the computed paid_members_enabled over the connect account id", () => {
+		const s = parseSettings([
+			{key: "members_signup_access", value: "all"},
+			{key: "paid_members_enabled", value: false},
+			{key: "stripe_connect_account_id", value: "acct_1"},
+		]);
+		expect(s.stripeEnabled).toBe(false);
+	});
+
 	it("treats signup access 'none' as members disabled, and stripe with it", () => {
 		const s = parseSettings([
 			{key: "members_signup_access", value: "none"},
@@ -75,6 +85,11 @@ describe("settings", () => {
 });
 
 describe("snippets", () => {
+	it("asks Ghost for the lexical format (the default is mobiledoc only)", async () => {
+		await listSnippets(SITE);
+		expect(calls[0].path).toContain("formats=lexical");
+	});
+
 	it("maps lexical to a string value and skips mobiledoc-only snippets", async () => {
 		responder = () => ({
 			snippets: [
@@ -93,7 +108,7 @@ describe("snippets", () => {
 		expect(calls[0].path).toBe("/snippets/");
 		expect(calls[0].init?.method).toBe("POST");
 		expect(JSON.parse(calls[0].init!.body as string)).toEqual({
-			snippets: [{name: "N", lexical: "{}"}],
+			snippets: [{name: "N", mobiledoc: EMPTY_MOBILEDOC, lexical: "{}"}],
 		});
 	});
 
@@ -105,10 +120,11 @@ describe("snippets", () => {
 		);
 		expect(calls[0].path).toBe("/snippets/9/");
 		expect(calls[0].init?.method).toBe("PUT");
+		// Ghost's schema forbids any field beyond name/mobiledoc/lexical.
 		expect(JSON.parse(calls[0].init!.body as string).snippets[0]).toEqual({
 			name: "N",
+			mobiledoc: EMPTY_MOBILEDOC,
 			lexical: '{"x":1}',
-			updated_at: "T1",
 		});
 	});
 
