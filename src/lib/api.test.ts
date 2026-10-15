@@ -1,0 +1,244 @@
+import {beforeEach, describe, expect, it, vi} from "vitest";
+
+const calls: {cmd: string; args: unknown}[] = [];
+
+vi.mock("@tauri-apps/api/core", () => ({
+	invoke: (cmd: string, args: unknown) => {
+		calls.push({cmd, args});
+		return Promise.resolve("minted-jwt");
+	},
+}));
+
+const fetchCalls: {url: string; init: RequestInit & {maxRedirections?: number}}[] =
+	[];
+
+function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}) {
+	return {
+		ok: status >= 200 && status < 300,
+		status,
+		url: "",
+		headers: new Headers(headers),
+		json: async () => body,
+	} as unknown as Response;
+}
+
+vi.mock("@tauri-apps/plugin-http", () => ({
+	fetch: (url: string, init: RequestInit) => {
+		fetchCalls.push({url, init});
+		// The /site/ probe and the authenticated calls are separate requests;
+		// tests set `probeResponse` for the former and `authResponse` for the rest.
+		if (url.endsWith("/site/")) {
+			return Promise.resolve(probeResponse);
+		}
+		return Promise.resolve(currentResponse);
+	},
+}));
+
+let currentResponse: Response = jsonResponse(200, {});
+let probeResponse: Response = jsonResponse(200, {});
+
+import {api, GhostError, connect, normalizeBase, type Site} from "./api";
+
+const SITE: Site = {
+	base: "https://everywayhuman.com",
+	siteUrl: "https://everywayhuman.com/",
+	title: "every way human",
+	version: "6.68",
+	keyKind: "staff",
+	role: "Owner",
+	clockOffset: 0,
+};
+
+beforeEach(() => {
+	calls.length = 0;
+	fetchCalls.length = 0;
+	currentResponse = jsonResponse(200, {});
+});
+
+describe("normalizeBase", () => {
+	it("defaults to https", () => {
+		expect(normalizeBase("example.com")).toBe("https://example.com");
+	});
+	it("strips /ghost", () => {
+		expect(normalizeBase("https://example.com/ghost")).toBe("https://example.com");
+	});
+	it("strips a deep ghost admin path", () => {
+		expect(normalizeBase("https://example.com/ghost/#/editor/post/abc")).toBe(
+			"https://example.com",
+		);
+	});
+	it("strips trailing slashes", () => {
+		expect(normalizeBase("https://example.com///")).toBe("https://example.com");
+	});
+	it("keeps a subdirectory install", () => {
+		expect(normalizeBase("https://example.com/blog/ghost")).toBe(
+			"https://example.com/blog",
+		);
+	});
+});
+
+describe("api", () => {
+	it("signs with a Ghost token and asks for v6.0", async () => {
+		await api(SITE, "/posts/");
+		const call = fetchCalls[0];
+		const headers = call.init.headers as Headers;
+		expect(headers.get("Authorization")).toBe("Ghost minted-jwt");
+		expect(headers.get("Accept-Version")).toBe("v6.0");
+		expect(calls[0].cmd).toBe("get_jwt");
+		expect(calls[0].args).toEqual({
+			base: SITE.base,
+			clockOffsetSecs: SITE.clockOffset,
+		});
+	});
+
+	it("never follows redirects on an authenticated call (rule 4.5)", async () => {
+		await api(SITE, "/posts/");
+		expect(fetchCalls[0].init.maxRedirections).toBe(0);
+	});
+
+	it("builds the admin URL from the stored base", async () => {
+		await api(SITE, "/posts/?limit=5");
+		expect(fetchCalls[0].url).toBe(
+			"https://everywayhuman.com/ghost/api/admin/posts/?limit=5",
+		);
+	});
+
+	it("sets JSON content type for a JSON body but not for FormData", async () => {
+		await api(SITE, "/posts/", {
+			method: "PUT",
+			body: JSON.stringify({posts: []}),
+		});
+		expect((fetchCalls[0].init.headers as Headers).get("Content-Type")).toBe(
+			"application/json",
+		);
+
+		fetchCalls.length = 0;
+		await api(SITE, "/images/upload/", {method: "POST", body: new FormData()});
+		expect(
+			(fetchCalls[0].init.headers as Headers).get("Content-Type"),
+		).toBeNull();
+	});
+
+	it("returns null for a 204", async () => {
+		currentResponse = jsonResponse(204, {});
+		expect(await api(SITE, "/posts/abc/", {method: "DELETE"})).toBeNull();
+	});
+
+	it("surfaces the server's error code and message", async () => {
+		currentResponse = jsonResponse(403, {
+			errors: [{code: "NO_SUBSCRIBERS", message: "nope"}],
+		});
+		await expect(api(SITE, "/posts/")).rejects.toMatchObject({
+			status: 403,
+			code: "NO_SUBSCRIBERS",
+			message: "nope",
+		});
+	});
+
+	it("turns a redirect into a reconnect message (rule 4.5)", async () => {
+		currentResponse = {
+			ok: false,
+			status: 301,
+			url: "",
+			headers: new Headers({location: "https://new.example.com"}),
+			json: async () => ({}),
+		} as unknown as Response;
+		await expect(api(SITE, "/posts/")).rejects.toThrow(/Reconnect/);
+	});
+});
+
+describe("connect", () => {
+	function defaultProbe(overrides: Partial<Response> = {}) {
+		return {
+			ok: true,
+			status: 200,
+			url: "https://everywayhuman.com/ghost/api/admin/site/",
+			headers: new Headers({
+				date: new Date(Date.now() + 60_000).toUTCString(),
+			}),
+			json: async () => ({
+				site: {
+					title: "every way human",
+					url: "https://everywayhuman.com/",
+					version: "6.68",
+				},
+			}),
+			...overrides,
+		} as unknown as Response;
+	}
+
+	beforeEach(() => {
+		probeResponse = defaultProbe();
+		currentResponse = jsonResponse(200, {
+			users: [{name: "Josiah", roles: [{name: "Owner"}]}],
+		});
+	});
+
+	it("stores the key and resolves the admin base", async () => {
+		const site = await connect("everywayhuman.com", "abc:deadbeef");
+		expect(fetchCalls[0].url).toBe(
+			"https://everywayhuman.com/ghost/api/admin/site/",
+		);
+		expect(calls.map(c => c.cmd)).toContain("save_key");
+		expect(site.base).toBe("https://everywayhuman.com");
+		expect(site.version).toBe("6.68");
+	});
+
+	it("measures clock skew from the Date header", async () => {
+		const site = await connect("everywayhuman.com", "abc:deadbeef");
+		// The stubbed Date header is 60s in the future.
+		expect(site.clockOffset).toBeGreaterThanOrEqual(55);
+		expect(site.clockOffset).toBeLessThanOrEqual(65);
+	});
+
+	it("detects a staff key via /users/me/", async () => {
+		currentResponse = jsonResponse(200, {
+			users: [{name: "Josiah", roles: [{name: "Owner"}]}],
+		});
+		const site = await connect("everywayhuman.com", "abc:deadbeef");
+		expect(site.keyKind).toBe("staff");
+		expect(site.role).toBe("Owner");
+	});
+
+	it("treats a 404 from /users/me/ as an integration key", async () => {
+		currentResponse = jsonResponse(404, {
+			errors: [{code: "NOT_FOUND", message: "not found"}],
+		});
+		const site = await connect("everywayhuman.com", "abc:deadbeef");
+		expect(site.keyKind).toBe("integration");
+		expect(site.role).toBeUndefined();
+	});
+
+	it("cleans up the key when the key is rejected (401)", async () => {
+		currentResponse = jsonResponse(401, {
+			errors: [{code: "INVALID_JWT", message: "Invalid token"}],
+		});
+		await expect(connect("everywayhuman.com", "abc:dead")).rejects.toThrow(
+			"Invalid token",
+		);
+		expect(calls.map(c => c.cmd)).toContain("delete_key");
+	});
+
+	it("reports a non-Ghost address clearly", async () => {
+		probeResponse = jsonResponse(404, {});
+		await expect(connect("example.com", "abc:deadbeef")).rejects.toThrow(
+			/Couldn't find a Ghost site/,
+		);
+	});
+});
+
+describe("GhostError", () => {
+	it("falls back to a status message when the body is not JSON", async () => {
+		const res = {
+			ok: false,
+			status: 500,
+			headers: new Headers(),
+			json: async () => {
+				throw new Error("not json");
+			},
+		} as unknown as Response;
+		const err = await GhostError.from(res);
+		expect(err.message).toBe("HTTP 500");
+		expect(err.code).toBeUndefined();
+	});
+});
