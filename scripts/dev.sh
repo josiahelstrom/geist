@@ -12,7 +12,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-IDENTITY="${GEIST_SIGN_IDENTITY:-Apple Development: josiahelstrom@icloud.com (58ZQDQFV4C)}}"
+IDENTITY="${GEIST_SIGN_IDENTITY:-Apple Development: josiahelstrom@icloud.com (58ZQDQFV4C)}"
 BIN="src-tauri/target/debug/geist"
 VITE_PID=""
 
