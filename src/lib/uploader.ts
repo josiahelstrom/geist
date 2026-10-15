@@ -7,6 +7,7 @@ export const FILE_TYPES = {
 	image: {mimeTypes: ["image/*"]},
 	audio: {mimeTypes: ["audio/*"]},
 	video: {mimeTypes: ["video/*"]},
+	file: {mimeTypes: ["*/*"]},
 };
 
 /**
