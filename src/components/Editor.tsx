@@ -34,7 +34,7 @@ import {
 	setPostStatus,
 	type PreviewMemberStatus,
 } from "../lib/posts";
-import {versionBanner} from "../lib/version";
+import {versionBanner, shouldEnforceReadOnly} from "../lib/version";
 import EditorErrorBoundary from "./EditorErrorBoundary";
 import MetadataSidebar, {type PostMetadataState} from "./MetadataSidebar";
 
@@ -93,6 +93,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	const [errorStatus, setErrorStatus] = useState<number | undefined>();
 	const [conflict, setConflict] = useState(false);
 	const [publishing, setPublishing] = useState(false);
+	const [readOnlyOverride, setReadOnlyOverride] = useState(false);
 	const [lexical, setLexical] = useState<string>("");
 
 	const [editorError, setEditorError] = useState<string | null>(null);
@@ -475,6 +476,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 
 	const canPublish = canPublishRole(site.role);
 	const banner = versionBanner(site.version);
+	const isReadOnly = shouldEnforceReadOnly(site.version) && !readOnlyOverride;
 
 	return (
 		<div className={sidebarOpen ? "editor-shell with-sidebar" : "editor-shell"}>
@@ -551,7 +553,20 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 					</button>
 				</header>
 
-				{banner && <p className="warn">{banner}</p>}
+				{banner && (
+					<div className="warn-banner">
+						<span>{banner}</span>
+						{shouldEnforceReadOnly(site.version) && !readOnlyOverride && (
+							<button
+								type="button"
+								onClick={() => setReadOnlyOverride(true)}
+								data-testid="override-version-guard-button"
+							>
+								Enable editing anyway
+							</button>
+						)}
+					</div>
+				)}
 
 				{conflict && (
 					<div className="warn-banner" data-testid="conflict">
@@ -649,6 +664,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 								<KoenigEditor
 									onChange={handleBody}
 									placeholderText="Begin writing…"
+									readOnly={isReadOnly}
 								/>
 							</KoenigComposer>
 						</div>

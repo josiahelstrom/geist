@@ -4,6 +4,9 @@ export const TESTED_GHOST = ["6.68"];
 /** The Koenig version this app bundles; pin it to the target site's version. */
 export const KOENIG_VERSION = "1.11.1";
 
+export const MIN_GHOST = "5.0";
+export const MAX_GHOST = "6.68";
+
 export type VersionStatus = "tested" | "newer" | "older" | "unknown";
 
 export function checkVersion(version: string): VersionStatus {
@@ -25,7 +28,7 @@ export function checkVersion(version: string): VersionStatus {
 const COPY: Record<VersionStatus, string | null> = {
 	tested: null,
 	newer:
-		"This site runs a newer Ghost than this app was tested against. Cards may not render correctly.",
+		"This site runs a newer Ghost than this version of Geist was tested against. To protect your posts from incompatible card schemas, editing is read-only unless overridden.",
 	older:
 		"This site runs an older Ghost than this app was tested against. Newer cards may not render.",
 	unknown: "Couldn't determine this site's Ghost version.",
@@ -33,4 +36,8 @@ const COPY: Record<VersionStatus, string | null> = {
 
 export function versionBanner(version: string): string | null {
 	return COPY[checkVersion(version)];
+}
+
+export function shouldEnforceReadOnly(version: string): boolean {
+	return checkVersion(version) === "newer";
 }
