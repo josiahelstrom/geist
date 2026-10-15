@@ -39,8 +39,8 @@ End-to-end auth tests run against a real site. Credentials come from the environ
 and are never committed:
 
 ```bash
-DRAFTDESK_TEST_BASE=https://your-site.com \
-DRAFTDESK_TEST_KEY=id:hex \
+GEIST_TEST_BASE=https://your-site.com \
+GEIST_TEST_KEY=id:hex \
   cargo test --manifest-path src-tauri/Cargo.toml --test e2e_admin -- --test-threads=1
 ```
 

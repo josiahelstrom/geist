@@ -4,7 +4,7 @@
 //! and the OS keychain only exist inside the Tauri runtime.
 //!
 //! Credentials come from the environment so they are never committed:
-//!   DRAFTDESK_TEST_BASE=https://site.example  DRAFTDESK_TEST_KEY=id:hex
+//!   GEIST_TEST_BASE=https://site.example  GEIST_TEST_KEY=id:hex
 //! Tests skip when those are absent.
 
 use geist_lib::mint;
@@ -13,11 +13,11 @@ use keyring::Entry;
 const SERVICE: &str = "app.geist.e2e-test";
 
 fn base() -> String {
-    std::env::var("DRAFTDESK_TEST_BASE").expect("DRAFTDESK_TEST_BASE")
+    std::env::var("GEIST_TEST_BASE").or_else(|_| std::env::var("DRAFTDESK_TEST_BASE")).expect("GEIST_TEST_BASE or DRAFTDESK_TEST_BASE")
 }
 
 fn key() -> String {
-    std::env::var("DRAFTDESK_TEST_KEY").expect("DRAFTDESK_TEST_KEY")
+    std::env::var("GEIST_TEST_KEY").or_else(|_| std::env::var("DRAFTDESK_TEST_KEY")).expect("GEIST_TEST_KEY or DRAFTDESK_TEST_KEY")
 }
 
 #[tokio::test]

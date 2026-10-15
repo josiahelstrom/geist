@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dev launcher for Draftdesk.
+# Dev launcher for Geist.
 #
 # Why this exists instead of `npm run tauri dev`:
 # tauri-cli always ad-hoc signs the debug binary, and macOS binds Keychain
@@ -12,7 +12,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-IDENTITY="${GEIST_SIGN_IDENTITY:-${DRAFTDESK_SIGN_IDENTITY:-Apple Development: josiahelstrom@icloud.com (58ZQDQFV4C)}}"
+IDENTITY="${GEIST_SIGN_IDENTITY:-Apple Development: josiahelstrom@icloud.com (58ZQDQFV4C)}}"
 BIN="src-tauri/target/debug/geist"
 VITE_PID=""
 
@@ -23,7 +23,7 @@ trap cleanup EXIT
 
 if ! security find-identity -v -p codesigning | grep -qF "$IDENTITY"; then
     echo "error: signing identity not found: $IDENTITY" >&2
-    echo "Set DRAFTDESK_SIGN_IDENTITY, or run 'security find-identity -v -p codesigning'." >&2
+    echo "Set GEIST_SIGN_IDENTITY, or run 'security find-identity -v -p codesigning'." >&2
     exit 1
 fi
 
