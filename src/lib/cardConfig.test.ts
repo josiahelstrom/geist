@@ -57,6 +57,41 @@ describe("settings", () => {
 			membersEnabled: true,
 			stripeEnabled: true,
 			siteDescription: "A site",
+			feature: {transistor: false, paywallImprovements: false},
+		});
+	});
+
+	it("reads transistor and labs feature flags", () => {
+		const s = parseSettings([
+			{key: "transistor", value: true},
+			{key: "labs", value: JSON.stringify({paywallImprovements: true})},
+		]);
+		expect(s.feature).toEqual({
+			transistor: true,
+			paywallImprovements: true,
+		});
+	});
+
+	it("accepts string booleans and an object labs value", () => {
+		const s = parseSettings([
+			{key: "transistor", value: "true"},
+			{key: "labs", value: {paywallImprovements: "true"}},
+		]);
+		expect(s.feature).toEqual({
+			transistor: true,
+			paywallImprovements: true,
+		});
+	});
+
+	it("ignores malformed labs values without failing settings", () => {
+		const s = parseSettings([
+			{key: "transistor", value: false},
+			{key: "labs", value: "{not json"},
+		]);
+		expect(s.loaded).toBe(true);
+		expect(s.feature).toEqual({
+			transistor: false,
+			paywallImprovements: false,
 		});
 	});
 
@@ -207,6 +242,7 @@ describe("buildCardConfig", () => {
 		membersEnabled: true,
 		stripeEnabled: false,
 		siteDescription: "Desc",
+		feature: {transistor: true, paywallImprovements: false},
 	};
 
 	it("exposes snippets and labels to staff keys", () => {
@@ -216,6 +252,10 @@ describe("buildCardConfig", () => {
 			onSnippetsChanged: () => {},
 		}) as Record<string, unknown>;
 		expect(cfg.siteDescription).toBe("Desc");
+		expect(cfg.feature).toEqual({
+			transistor: true,
+			paywallImprovements: false,
+		});
 		expect(cfg.visibilitySettings).toBe("web and email");
 		expect(typeof cfg.createSnippet).toBe("function");
 		expect(typeof cfg.deleteSnippet).toBe("function");

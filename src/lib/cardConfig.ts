@@ -14,12 +14,19 @@ import {api, type Site} from "./api";
  * key that cannot read settings or snippets must still be able to edit.
  */
 
+/** Labs flags Koenig uses to hide or show cards (plan §7 `feature`). */
+export type SiteFeatures = {
+	transistor: boolean;
+	paywallImprovements: boolean;
+};
+
 export type SiteSettings = {
 	/** False when /settings/ could not be read (e.g. a restricted key). */
 	loaded: boolean;
 	membersEnabled: boolean;
 	stripeEnabled: boolean;
 	siteDescription: string;
+	feature: SiteFeatures;
 };
 
 export const DEFAULT_SETTINGS: SiteSettings = {
@@ -27,9 +34,34 @@ export const DEFAULT_SETTINGS: SiteSettings = {
 	membersEnabled: false,
 	stripeEnabled: false,
 	siteDescription: "",
+	feature: {transistor: false, paywallImprovements: false},
 };
 
 type RawSetting = {key: string; value: unknown};
+
+/** Ghost booleans arrive as booleans; older settings can still be strings. */
+function asBoolean(value: unknown): boolean {
+	return value === true || value === "true";
+}
+
+/**
+ * The `labs` setting is a JSON string holding the flag map (Ghost serialises
+ * `labs.getAll()` into the setting). Tolerate an object too, and never let a
+ * malformed value break settings loading.
+ */
+function parseLabs(value: unknown): Record<string, unknown> {
+	let parsed = value;
+	if (typeof value === "string") {
+		try {
+			parsed = JSON.parse(value) as unknown;
+		} catch {
+			return {};
+		}
+	}
+	return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+		? (parsed as Record<string, unknown>)
+		: {};
+}
 
 export function parseSettings(list: RawSetting[]): SiteSettings {
 	const get = (key: string) => list.find(s => s.key === key)?.value;
@@ -47,11 +79,16 @@ export function parseSettings(list: RawSetting[]): SiteSettings {
 			? paid
 			: Boolean(get("stripe_connect_account_id"));
 	const description = get("description");
+	const labs = parseLabs(get("labs"));
 	return {
 		loaded: true,
 		membersEnabled,
 		stripeEnabled: membersEnabled && stripeEnabled,
 		siteDescription: typeof description === "string" ? description : "",
+		feature: {
+			transistor: asBoolean(get("transistor")),
+			paywallImprovements: asBoolean(labs.paywallImprovements),
+		},
 	};
 }
 
@@ -334,6 +371,11 @@ export function buildCardConfig(site: Site, state: CardConfigState) {
 		siteDescription: settings.siteDescription,
 		membersEnabled: settings.membersEnabled,
 		stripeEnabled: settings.stripeEnabled,
+		// Always present, like Ghost: false flags mean "card hidden".
+		feature: {
+			transistor: settings.feature.transistor,
+			paywallImprovements: settings.feature.paywallImprovements,
+		},
 		...(settings.loaded
 			? {
 					visibilitySettings: settings.membersEnabled
