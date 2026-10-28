@@ -12,18 +12,24 @@ use keyring::Entry;
 
 const SERVICE: &str = "app.geist.e2e-test";
 
-fn base() -> String {
-    std::env::var("GEIST_TEST_BASE").or_else(|_| std::env::var("DRAFTDESK_TEST_BASE")).expect("GEIST_TEST_BASE or DRAFTDESK_TEST_BASE")
-}
-
-fn key() -> String {
-    std::env::var("GEIST_TEST_KEY").or_else(|_| std::env::var("DRAFTDESK_TEST_KEY")).expect("GEIST_TEST_KEY or DRAFTDESK_TEST_KEY")
+/// Credentials come from the environment; when they are absent these checks
+/// are skipped rather than failing a plain `cargo test` run.
+fn creds() -> Option<(String, String)> {
+    let base = std::env::var("GEIST_TEST_BASE")
+        .or_else(|_| std::env::var("DRAFTDESK_TEST_BASE"))
+        .ok()?;
+    let secret = std::env::var("GEIST_TEST_KEY")
+        .or_else(|_| std::env::var("DRAFTDESK_TEST_KEY"))
+        .ok()?;
+    if base.trim().is_empty() || secret.trim().is_empty() {
+        return None;
+    }
+    Some((base, secret))
 }
 
 #[tokio::test]
 async fn stored_key_produces_a_token_the_server_accepts() {
-    let base = base();
-    let secret = key();
+    let Some((base, secret)) = creds() else { return; };
 
     // Write through the same keychain path the app uses.
     let entry = Entry::new(SERVICE, &base).expect("open keychain entry");
@@ -67,8 +73,8 @@ async fn stored_key_produces_a_token_the_server_accepts() {
 
 #[tokio::test]
 async fn tampered_token_is_rejected_by_the_server() {
-    let base = base();
-    let jwt = mint(&key(), 0).expect("mint token");
+    let Some((base, secret)) = creds() else { return; };
+    let jwt = mint(&secret, 0).expect("mint token");
     let mut bad = jwt.clone();
     let last = bad.pop().unwrap();
     bad.push(if last == 'A' { 'B' } else { 'A' });
@@ -88,7 +94,7 @@ async fn tampered_token_is_rejected_by_the_server() {
 
 #[tokio::test]
 async fn wrong_secret_is_rejected() {
-    let base = base();
+    let Some((base, _secret)) = creds() else { return; };
     let forged = mint(&format!("deadbeef:{}", "00".repeat(32)), 0).expect("mint");
 
     let client = reqwest::Client::new();
@@ -108,8 +114,8 @@ async fn wrong_secret_is_rejected() {
 async fn clock_offset_produces_a_valid_token() {
     // A server whose clock runs ahead is the §13 risk. Simulate a +60s offset
     // and confirm the server still accepts the token.
-    let base = base();
-    let jwt = mint(&key(), 60).expect("mint with offset");
+    let Some((base, secret)) = creds() else { return; };
+    let jwt = mint(&secret, 60).expect("mint with offset");
 
     let client = reqwest::Client::new();
     let status = client
@@ -128,12 +134,12 @@ async fn clock_offset_produces_a_valid_token() {
 async fn redirects_are_not_followed_so_auth_is_never_dropped() {
     // Rule 4.5: an authenticated call must surface a redirect as an error
     // rather than silently replaying the request without the header.
+    let Some((base, _secret)) = creds() else { return; };
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap();
 
-    let base = base();
     let res = client
         .get(format!("{base}/ghost/api/admin/site/"))
         .send()

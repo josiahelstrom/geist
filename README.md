@@ -31,7 +31,7 @@ Override the signing identity with `GEIST_SIGN_IDENTITY` if yours differs.
 ## Checks
 
 ```bash
-npm run check        # tsc --noEmit + 68 unit tests
+npm run check        # tsc --noEmit + 114 unit tests
 npm run test:rust    # keyring round-trip, HTTP scope, preview URL guard, JWT minting
 ```
 
@@ -52,7 +52,7 @@ npm run tauri build
 
 The `.app` and `.dmg` land in:
 - `src-tauri/target/release/bundle/macos/Geist.app`
-- `src-tauri/target/release/bundle/dmg/Geist_0.2.0_aarch64.dmg`
+- `src-tauri/target/release/bundle/dmg/Geist_0.3.0_aarch64.dmg`
 
 ## How it works
 
@@ -76,3 +76,13 @@ Deliberate safety rules, each covered by a test:
   `WebviewWindow` (`preview` label, excluded from `capabilities/default.json`) with
   `?member_status=anonymous|free|paid` tier toggles. Site and theme HTML is never
   rendered inside the app's origin.
+- Ghost version compatibility is checked before editing. Below `MIN_GHOST` (`5.0`)
+  the app warns; above `MAX_GHOST` (`6.68`) the post is opened **read-only** unless you
+  explicitly override, because newer Ghost card schemas could be lost on save. If a post
+  contains an unknown Lexical node, an error boundary catches it and offers
+  "Open in Ghost Admin ↗" instead of blanking the editor.
+
+v0.3.0 closed the remaining editor gap: full `cardConfig` parity with Ghost Admin
+(`/settings/`, `/snippets/`, `/labels/`, link search/autocomplete, Unsplash and Klipy
+GIF) and full media upload parity (`/images/`, `/media/`, `/file/`, plus
+`mediaThumbnail`), with CSS token theming and dark/light mode.

@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useState} from "react";
 import {type Post, type Site} from "./lib/api";
 import {createDraft} from "./lib/posts";
+import {applyTheme, getStoredTheme} from "./lib/theme";
 import {
 	getActiveBase,
 	hydrateSitesFromStore,
@@ -21,6 +22,25 @@ export default function App() {
 	const [sites, setSites] = useState<Site[]>(() => loadSites());
 	const [site, setSite] = useState<Site | null>(null);
 	const [view, setView] = useState<View>({name: "connect"});
+
+	// Apply the saved theme on boot and keep "system" in sync with the OS.
+	useEffect(() => {
+		applyTheme();
+
+		if (!window.matchMedia) {
+			return;
+		}
+
+		const media = window.matchMedia("(prefers-color-scheme: dark)");
+		function onSystemThemeChange() {
+			if (getStoredTheme() === "system") {
+				applyTheme("system");
+			}
+		}
+
+		media.addEventListener("change", onSystemThemeChange);
+		return () => media.removeEventListener("change", onSystemThemeChange);
+	}, []);
 
 	// Restore the last session from local cache first, then hydrate from
 	// `tauri-plugin-store` (`geist-sites.json`).

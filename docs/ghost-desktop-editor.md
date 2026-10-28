@@ -817,7 +817,7 @@ cargo add hmac@0.12 sha2@0.10 base64@0.22 hex serde_json
 
 ---
 
-## 18. Handoff status (Geist v0.2.0 complete → v0.3.0 next)
+## 18. Handoff status (Geist v0.3.0 complete → v0.4.0 next)
 
 - **Project path**: `/Users/josiahelstrom/Documents/10 Projects/14 Coding/geist` (renamed from `draftdesk`).
 - **App / Bundle ID**: `Geist` / `app.geist.desktop` (Keychain service `app.geist` with fallback migration from `app.draftdesk`).
@@ -828,14 +828,14 @@ cargo add hmac@0.12 sha2@0.10 base64@0.22 hex serde_json
   - Conflict & error UX: Reload server version or Overwrite on `409`, Retry save on transient errors, and `adoptUpdatedAt` after publish/unpublish.
   - Site persistence via `tauri-plugin-store` (`geist-sites.json`) with migration from `localStorage`.
   - Test suite: 68 frontend tests (`npm run check`) + 19 Rust unit/scope/keychain tests (`npm run test:rust`) + 5 live e2e tests (`cargo test --test e2e_admin`).
+- **v0.3.0 completed**:
+  - Four 0.2.0 audit bugs fixed: no-op initial-mount `onChange` no longer marks a post `Unsaved`/schedules a `PUT`, `saverRef` is flushed before `← Posts`, `KoenigComposer` is wrapped in an error boundary with an "Open in Ghost Admin ↗" fallback for unknown Lexical nodes, and `MetadataSidebar` saves tags through `serializeTagsForSave`.
+  - Full `cardConfig` parity (`src/lib/cardConfig.ts`): site settings (`membersEnabled`, `stripeEnabled`, `siteDescription`, `visibilitySettings`), snippets (fetch/create/delete), labels, link search + autocomplete, Unsplash, Klipy GIF, feature flags (`transistor`, `paywallImprovements`), and post visibility.
+  - Full media upload parity (`src/lib/uploader.ts`): `/images/` (+ client-generated `mediaThumbnail`), `/media/` for audio and video, and `/file/` for everything else, all verified against live Ghost.
+  - CSS token theming with system/dark/light mode (`src/lib/theme.ts`) plus GPU transform compositing for smoother scrolling.
+  - `MIN_GHOST` / `MAX_GHOST` compatibility policy (`src/lib/version.ts`): `5.0`–`6.68` editable, older shows a warning banner, newer is enforced read-only with an explicit per-site override, and an undetectable version stays editable but carries a warning banner.
+  - Test suite: 114 frontend tests (`npm run check`, 9 files) + 19 Rust tests + 5 live e2e tests.
 
-### Next up for v0.3.0
-1. **Fix 4 edge-case bugs found during the 0.2.0 code audit**:
-   - Suppress no-op initial-mount `onChange` emissions from Koenig's `OnChangePlugin` in `Editor.tsx` so merely opening a post does not mark it `Unsaved` or send a `PUT` 1.5s later.
-   - Flush `saverRef.current` before navigating back on `← Posts` in `Editor.tsx`.
-   - Wrap `KoenigComposer` in an Error Boundary + `onError` handler with an "Open in Ghost Admin ↗" fallback if a post has an unknown Lexical node.
-   - Use `serializeTagsForSave` in `MetadataSidebar.tsx`.
-2. **v0.3.0 Card Parity, Media Uploads & Version Compatibility Policy**:
-   - Populate `cardConfig` keys from `/settings/`, `/snippets/` (staff keys only), `/labels/`, and `/posts/` + `/pages/` (`membersEnabled`, `stripeEnabled`, `siteDescription`, `visibilitySettings`, `fetchAutocompleteLinks`, `searchLinks`, `snippets`, `createSnippet`, `deleteSnippet`, `fetchLabels`, `renderLabels`).
-   - Expand `FILE_TYPES` and verify `/audio`, `/video`, `/file`, and `mediaThumbnail` uploads.
-   - Implement `MIN_GHOST` / `MAX_GHOST` compatibility policy (§10) with read-only guard + override for sites newer than `MAX_GHOST`.
+### Next up for v0.4.0
+1. Exercise the remaining React ↔ Tauri glue (§16.6) end to end in the packaged app, so `invoke` and `plugin-http` calls are covered by something other than manual clicking.
+2. Re-audit card coverage against the Ghost version `TESTED_GHOST` points at and raise `MAX_GHOST` once a newer Koenig build is promoted.

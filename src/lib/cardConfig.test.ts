@@ -28,6 +28,7 @@ const {
 	buildCardConfig,
 	EMPTY_MOBILEDOC,
 	DEFAULT_SETTINGS,
+	DEFAULT_UNSPLASH_HEADERS,
 } = await import("./cardConfig");
 
 const SITE: Site = {
@@ -57,8 +58,64 @@ describe("settings", () => {
 			membersEnabled: true,
 			stripeEnabled: true,
 			siteDescription: "A site",
+			unsplashEnabled: true,
+			klipy: null,
 			feature: {transistor: false, paywallImprovements: false},
 		});
+	});
+
+	it("enables unsplash by default when the setting is missing", () => {
+		expect(parseSettings([]).unsplashEnabled).toBe(true);
+		expect(
+			parseSettings([{key: "unsplash", value: true}]).unsplashEnabled,
+		).toBe(true);
+		expect(
+			parseSettings([{key: "unsplash", value: "true"}]).unsplashEnabled,
+		).toBe(true);
+	});
+
+	it("disables unsplash when the setting is false", () => {
+		expect(
+			parseSettings([{key: "unsplash", value: false}]).unsplashEnabled,
+		).toBe(false);
+		expect(
+			parseSettings([{key: "unsplash", value: "false"}]).unsplashEnabled,
+		).toBe(false);
+	});
+
+	it("reads klipy from the /config/ payload passed as the second argument", () => {
+		const s = parseSettings([], {
+			klipy: {apiKey: "k1", contentFilter: "medium"},
+		});
+		expect(s.klipy).toEqual({apiKey: "k1", contentFilter: "medium"});
+	});
+
+	it("reads klipy from a setting when /config/ has none", () => {
+		const s = parseSettings([{key: "klipy", value: {apiKey: "  k2  "}}]);
+		expect(s.klipy).toEqual({apiKey: "k2"});
+	});
+
+	it("ignores empty or malformed klipy config", () => {
+		expect(parseSettings([], {klipy: {apiKey: "  "}}).klipy).toBeNull();
+		expect(parseSettings([], {klipy: {}}).klipy).toBeNull();
+		expect(parseSettings([], {klipy: "k1"}).klipy).toBeNull();
+		expect(parseSettings([], {klipy: [{apiKey: "k1"}]}).klipy).toBeNull();
+		expect(parseSettings([]).klipy).toBeNull();
+	});
+
+	it("loads klipy from /config/", async () => {
+		responder = path => {
+			if (path === "/settings/") {
+				return {settings: []};
+			}
+			if (path === "/config/") {
+				return {config: {klipy: {apiKey: "k1"}}};
+			}
+			return {};
+		};
+		const s = await loadSiteSettings(SITE);
+		expect(s.klipy).toEqual({apiKey: "k1"});
+		expect(s.unsplashEnabled).toBe(true);
 	});
 
 	it("reads transistor and labs feature flags", () => {
@@ -242,6 +299,8 @@ describe("buildCardConfig", () => {
 		membersEnabled: true,
 		stripeEnabled: false,
 		siteDescription: "Desc",
+		unsplashEnabled: true,
+		klipy: null,
 		feature: {transistor: true, paywallImprovements: false},
 	};
 
@@ -290,6 +349,61 @@ describe("buildCardConfig", () => {
 		}) as Record<string, unknown>;
 		expect(cfg.visibilitySettings).toBe("none");
 		expect(cfg.renderLabels).toBeUndefined();
+	});
+
+	it("sets unsplash headers when unsplash is enabled and null when disabled", () => {
+		const enabled = buildCardConfig(SITE, {
+			settings: {...loaded, unsplashEnabled: true},
+			snippets: [],
+			onSnippetsChanged: () => {},
+		}) as Record<string, unknown>;
+		expect(enabled.unsplash).toBe(DEFAULT_UNSPLASH_HEADERS);
+
+		const disabled = buildCardConfig(SITE, {
+			settings: {...loaded, unsplashEnabled: false},
+			snippets: [],
+			onSnippetsChanged: () => {},
+		}) as Record<string, unknown>;
+		expect(disabled.unsplash).toBeNull();
+	});
+
+	it("passes klipy and the deprecated header flag through", () => {
+		const cfg = buildCardConfig(SITE, {
+			settings: {...loaded, klipy: {apiKey: "k1", contentFilter: "medium"}},
+			snippets: [],
+			onSnippetsChanged: () => {},
+		}) as Record<string, unknown>;
+		expect(cfg.klipy).toEqual({apiKey: "k1", contentFilter: "medium"});
+		expect(cfg.deprecated).toEqual({headerV1: true});
+	});
+
+	it("defaults post visibility to public", () => {
+		const cfg = buildCardConfig(SITE, {
+			settings: loaded,
+			snippets: [],
+			onSnippetsChanged: () => {},
+		}) as Record<string, unknown>;
+		expect(cfg.post).toEqual({
+			displayName: "post",
+			isPage: false,
+			showTitleAndFeatureImage: true,
+			visibility: "public",
+		});
+	});
+
+	it("uses the requested post visibility", () => {
+		const cfg = buildCardConfig(SITE, {
+			settings: loaded,
+			snippets: [],
+			postVisibility: "paid",
+			onSnippetsChanged: () => {},
+		}) as Record<string, unknown>;
+		expect(cfg.post).toEqual({
+			displayName: "post",
+			isPage: false,
+			showTitleAndFeatureImage: true,
+			visibility: "paid",
+		});
 	});
 
 	it("refreshes snippets after create and delete", async () => {

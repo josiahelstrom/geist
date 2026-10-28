@@ -37,6 +37,8 @@ type Props = {
 	) => void;
 	onDeletePost: () => Promise<void>;
 	onClose: () => void;
+	/** Version guard is active: render values but block every mutation. */
+	readOnly?: boolean;
 };
 
 export default function MetadataSidebar({
@@ -48,6 +50,7 @@ export default function MetadataSidebar({
 	onChange,
 	onDeletePost,
 	onClose,
+	readOnly = false,
 }: Props) {
 	const [tagInput, setTagInput] = useState("");
 	const [authorSelect, setAuthorSelect] = useState("");
@@ -63,12 +66,18 @@ export default function MetadataSidebar({
 		value: PostMetadataState[K],
 		apiPatch: Record<string, unknown>,
 	) {
+		if (readOnly) {
+			return;
+		}
 		onChange({...meta, [key]: value}, apiPatch);
 	}
 
 	async function handleFeatureImageSelect(
 		e: React.ChangeEvent<HTMLInputElement>,
 	) {
+		if (readOnly) {
+			return;
+		}
 		const file = e.target.files?.[0];
 		if (!file) {
 			return;
@@ -102,6 +111,9 @@ export default function MetadataSidebar({
 	}
 
 	function handleRemoveFeatureImage() {
+		if (readOnly) {
+			return;
+		}
 		onChange(
 			{
 				...meta,
@@ -118,6 +130,9 @@ export default function MetadataSidebar({
 	}
 
 	function handleAddTag(rawName: string) {
+		if (readOnly) {
+			return;
+		}
 		const trimmed = rawName.trim().replace(/,+$/, "").trim();
 		if (!trimmed) {
 			return;
@@ -143,6 +158,9 @@ export default function MetadataSidebar({
 	}
 
 	function handleRemoveTag(index: number) {
+		if (readOnly) {
+			return;
+		}
 		const nextTags = meta.tags.filter((_, i) => i !== index);
 		updateField("tags", nextTags, {
 			tags: serializeTagsForSave(nextTags),
@@ -150,7 +168,7 @@ export default function MetadataSidebar({
 	}
 
 	function handleAddAuthor(authorId: string) {
-		if (!authorId) {
+		if (readOnly || !authorId) {
 			return;
 		}
 		const candidate = siteAuthors.find(a => a.id === authorId);
@@ -166,6 +184,9 @@ export default function MetadataSidebar({
 	}
 
 	function handleRemoveAuthor(authorId: string) {
+		if (readOnly) {
+			return;
+		}
 		if (meta.authors.length <= 1) {
 			return; // Ghost requires at least one author on every post
 		}
@@ -176,6 +197,9 @@ export default function MetadataSidebar({
 	}
 
 	async function handleDelete() {
+		if (readOnly) {
+			return;
+		}
 		setDeleting(true);
 		try {
 			await onDeletePost();
@@ -209,6 +233,7 @@ export default function MetadataSidebar({
 					type="file"
 					accept="image/*"
 					onChange={handleFeatureImageSelect}
+					disabled={readOnly}
 					style={{display: "none"}}
 					data-testid="feature-image-file-input"
 				/>
@@ -223,14 +248,14 @@ export default function MetadataSidebar({
 							<button
 								type="button"
 								onClick={() => fileInputRef.current?.click()}
-								disabled={uploadingImage}
+								disabled={uploadingImage || readOnly}
 							>
 								{uploadingImage ? "Uploading…" : "Replace"}
 							</button>
 							<button
 								type="button"
 								onClick={handleRemoveFeatureImage}
-								disabled={uploadingImage}
+								disabled={uploadingImage || readOnly}
 							>
 								Remove
 							</button>
@@ -244,6 +269,7 @@ export default function MetadataSidebar({
 								})
 							}
 							placeholder="Alt text (describes image)"
+							disabled={readOnly}
 							data-testid="feature-image-alt"
 						/>
 						<input
@@ -254,6 +280,7 @@ export default function MetadataSidebar({
 								})
 							}
 							placeholder="Caption (optional)"
+							disabled={readOnly}
 							data-testid="feature-image-caption"
 						/>
 					</div>
@@ -262,7 +289,7 @@ export default function MetadataSidebar({
 						<button
 							type="button"
 							onClick={() => fileInputRef.current?.click()}
-							disabled={uploadingImage}
+							disabled={uploadingImage || readOnly}
 						>
 							{uploadingImage ? "Uploading…" : "Upload feature image"}
 						</button>
@@ -283,6 +310,7 @@ export default function MetadataSidebar({
 					}
 					placeholder="post-slug"
 					spellCheck={false}
+					disabled={readOnly}
 					data-testid="slug-input"
 				/>
 				<p className="hint truncate" title={`${site.siteUrl}${meta.slug || ""}/`}>
@@ -319,6 +347,7 @@ export default function MetadataSidebar({
 						});
 					}}
 					placeholder="Short summary for cards, emails and social previews…"
+					disabled={readOnly}
 					data-testid="excerpt-input"
 				/>
 			</section>
@@ -340,6 +369,7 @@ export default function MetadataSidebar({
 									type="button"
 									className="chip-remove"
 									onClick={() => handleRemoveTag(idx)}
+									disabled={readOnly}
 									aria-label={`Remove tag ${tag.name}`}
 								>
 									×
@@ -361,12 +391,13 @@ export default function MetadataSidebar({
 							}
 						}}
 						placeholder="Add a tag and press Enter…"
+						disabled={readOnly}
 						data-testid="tag-input"
 					/>
 					<button
 						type="button"
 						onClick={() => handleAddTag(tagInput)}
-						disabled={!tagInput.trim()}
+						disabled={readOnly || !tagInput.trim()}
 					>
 						Add
 					</button>
@@ -389,6 +420,7 @@ export default function MetadataSidebar({
 									type="button"
 									className="chip-remove"
 									onClick={() => handleRemoveAuthor(author.id)}
+									disabled={readOnly}
 									aria-label={`Remove author ${author.name}`}
 								>
 									×
@@ -406,6 +438,7 @@ export default function MetadataSidebar({
 								handleAddAuthor(e.target.value);
 							}}
 							aria-label="Add author"
+							disabled={readOnly}
 							data-testid="author-select"
 						>
 							<option value="">Add co-author…</option>
@@ -434,6 +467,7 @@ export default function MetadataSidebar({
 								featured: e.target.checked,
 							})
 						}
+						disabled={readOnly}
 						data-testid="featured-checkbox"
 					/>
 					<span>Feature this post</span>
@@ -451,7 +485,7 @@ export default function MetadataSidebar({
 					type="button"
 					className="danger-button"
 					onClick={handleDelete}
-					disabled={deleting}
+					disabled={deleting || readOnly}
 					data-testid="delete-post-button"
 				>
 					{deleting ? "Deleting…" : "Delete post"}

@@ -33,12 +33,15 @@ export type AuthorSummary = {
 
 export type PostStatusFilter = "draft" | "published" | "scheduled" | "all";
 
+export type PostVisibility = "public" | "members" | "paid" | "tiers";
+
 export type Post = {
 	id: string;
 	uuid: string;
 	title: string | null;
 	slug?: string;
 	status: string;
+	visibility?: PostVisibility;
 	featured?: boolean;
 	custom_excerpt?: string | null;
 	feature_image?: string | null;

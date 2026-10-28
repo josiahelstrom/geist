@@ -1,18 +1,40 @@
-import {api, type Site} from "./api";
+import {api, type PostVisibility, type Site} from "./api";
 
 /**
  * Everything Koenig's `cardConfig` needs from the Ghost Admin API.
  *
- * Shapes were read out of the 1.11.1 bundle, not guessed:
+ * Shapes were read out of the 1.11.1 bundle and Ghost 6.68 Admin, not guessed:
  * - `searchLinks(term?)`  -> `{label, items: {title, url, metaText?}[]}[]`
  * - `fetchAutocompleteLinks()` -> `{label, value}[]`
  * - `snippets`            -> `{id, name, value}[]`, `value` is a JSON *string*
  * - `createSnippet({name, value})`, `deleteSnippet(snippet)`
  * - `fetchLabels()`       -> `string[]` (label names)
+ * - `unsplash`            -> default Unsplash headers object when enabled, else `null`
+ * - `klipy`               -> `{apiKey, contentFilter?}` from `/config/` when configured, else `null`
+ * - `post`                -> `{displayName: "post", isPage: false, showTitleAndFeatureImage: true, visibility}`
  *
  * Every loader degrades to an empty/disabled result rather than throwing: a
  * key that cannot read settings or snippets must still be able to edit.
  */
+
+/**
+ * Ghost's built-in Unsplash API client headers (`defaultUnsplashConfig` in
+ * Ghost Admin). Passed as `cardConfig.unsplash` when the site's `unsplash`
+ * setting is enabled.
+ */
+export const DEFAULT_UNSPLASH_HEADERS = {
+	Authorization:
+		"Client-ID 8672af113b0a8573edae3aa3713886265d9bb741d707f6c01a486cde8c278980",
+	"Accept-Version": "v1",
+	"Content-Type": "application/json",
+	"App-Pragma": "no-cache",
+	"X-Unsplash-Cache": true,
+} as const;
+
+export type KlipyConfig = {
+	apiKey: string;
+	contentFilter?: string;
+};
 
 /** Labs flags Koenig uses to hide or show cards (plan §7 `feature`). */
 export type SiteFeatures = {
@@ -26,6 +48,8 @@ export type SiteSettings = {
 	membersEnabled: boolean;
 	stripeEnabled: boolean;
 	siteDescription: string;
+	unsplashEnabled: boolean;
+	klipy: KlipyConfig | null;
 	feature: SiteFeatures;
 };
 
@@ -34,14 +58,36 @@ export const DEFAULT_SETTINGS: SiteSettings = {
 	membersEnabled: false,
 	stripeEnabled: false,
 	siteDescription: "",
+	unsplashEnabled: false,
+	klipy: null,
 	feature: {transistor: false, paywallImprovements: false},
 };
 
 type RawSetting = {key: string; value: unknown};
+type RawConfig = {
+	klipy?: unknown;
+	labs?: unknown;
+};
 
 /** Ghost booleans arrive as booleans; older settings can still be strings. */
 function asBoolean(value: unknown): boolean {
 	return value === true || value === "true";
+}
+
+function parseKlipy(raw: unknown): KlipyConfig | null {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+		return null;
+	}
+	const obj = raw as Record<string, unknown>;
+	const apiKey = typeof obj.apiKey === "string" ? obj.apiKey.trim() : "";
+	if (!apiKey) {
+		return null;
+	}
+	const contentFilter =
+		typeof obj.contentFilter === "string" && obj.contentFilter.trim()
+			? obj.contentFilter.trim()
+			: undefined;
+	return contentFilter ? {apiKey, contentFilter} : {apiKey};
 }
 
 /**
@@ -63,7 +109,10 @@ function parseLabs(value: unknown): Record<string, unknown> {
 		: {};
 }
 
-export function parseSettings(list: RawSetting[]): SiteSettings {
+export function parseSettings(
+	list: RawSetting[],
+	config?: RawConfig,
+): SiteSettings {
 	const get = (key: string) => list.find(s => s.key === key)?.value;
 	const access = get("members_signup_access");
 	const membersEnabled =
@@ -79,23 +128,38 @@ export function parseSettings(list: RawSetting[]): SiteSettings {
 			? paid
 			: Boolean(get("stripe_connect_account_id"));
 	const description = get("description");
+	// Ghost's default-settings.json enables `unsplash` unless turned off.
+	const rawUnsplash = get("unsplash");
+	const unsplashEnabled =
+		rawUnsplash === undefined ? true : asBoolean(rawUnsplash);
+	const klipy = parseKlipy(config?.klipy ?? get("klipy"));
 	const labs = parseLabs(get("labs"));
+	const configLabs = parseLabs(config?.labs);
 	return {
 		loaded: true,
 		membersEnabled,
 		stripeEnabled: membersEnabled && stripeEnabled,
 		siteDescription: typeof description === "string" ? description : "",
+		unsplashEnabled,
+		klipy,
 		feature: {
 			transistor: asBoolean(get("transistor")),
-			paywallImprovements: asBoolean(labs.paywallImprovements),
+			paywallImprovements:
+				asBoolean(labs.paywallImprovements) ||
+				asBoolean(configLabs.paywallImprovements),
 		},
 	};
 }
 
 export async function loadSiteSettings(site: Site): Promise<SiteSettings> {
 	try {
-		const res = await api<{settings: RawSetting[]}>(site, "/settings/");
-		return parseSettings(res.settings ?? []);
+		const [settingsRes, configRes] = await Promise.all([
+			api<{settings: RawSetting[]}>(site, "/settings/"),
+			api<{config?: RawConfig}>(site, "/config/").catch(
+				(): {config?: RawConfig} => ({}),
+			),
+		]);
+		return parseSettings(settingsRes.settings ?? [], configRes?.config);
 	} catch {
 		return DEFAULT_SETTINGS;
 	}
@@ -350,6 +414,7 @@ export async function fetchAutocompleteLinks(
 export type CardConfigState = {
 	settings: SiteSettings;
 	snippets: Snippet[];
+	postVisibility?: PostVisibility;
 	/** Called after a snippet is created, updated or deleted. */
 	onSnippetsChanged: () => void;
 };
@@ -362,7 +427,7 @@ export type CardConfigState = {
  * settings could not be read, rather than guessing "none".
  */
 export function buildCardConfig(site: Site, state: CardConfigState) {
-	const {settings, snippets, onSnippetsChanged} = state;
+	const {settings, snippets, postVisibility, onSnippetsChanged} = state;
 	const staff = site.keyKind === "staff";
 
 	return {
@@ -371,6 +436,15 @@ export function buildCardConfig(site: Site, state: CardConfigState) {
 		siteDescription: settings.siteDescription,
 		membersEnabled: settings.membersEnabled,
 		stripeEnabled: settings.stripeEnabled,
+		unsplash: settings.unsplashEnabled ? DEFAULT_UNSPLASH_HEADERS : null,
+		klipy: settings.klipy,
+		deprecated: {headerV1: true},
+		post: {
+			displayName: "post" as const,
+			isPage: false,
+			showTitleAndFeatureImage: true,
+			visibility: postVisibility ?? "public",
+		},
 		// Always present, like Ghost: false flags mean "card hidden".
 		feature: {
 			transistor: settings.feature.transistor,

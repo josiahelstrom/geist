@@ -10,6 +10,7 @@ import {
 	type TagSummary,
 } from "../lib/api";
 import {filterPosts} from "../lib/posts";
+import {shouldEnforceReadOnly, versionBanner} from "../lib/version";
 
 type Props = {
 	site: Site;
@@ -111,6 +112,14 @@ export default function PostList({
 	}, [posts, query, tagFilter, featuredOnly]);
 
 	async function handleNewDraft() {
+		if (shouldEnforceReadOnly(site.version)) {
+			const proceed = window.confirm(
+				"This site runs a newer Ghost than this app supports. Create a new draft anyway?",
+			);
+			if (!proceed) {
+				return;
+			}
+		}
 		setCreating(true);
 		setError(null);
 		try {
@@ -124,6 +133,8 @@ export default function PostList({
 			setCreating(false);
 		}
 	}
+
+	const banner = versionBanner(site.version);
 
 	return (
 		<div className="postlist">
@@ -166,6 +177,12 @@ export default function PostList({
 					Sites
 				</button>
 			</header>
+
+			{banner && (
+				<div className="warn-banner">
+					<span>{banner}</span>
+				</div>
+			)}
 
 			<div className="postlist-controls">
 				<nav className="tabs" aria-label="Post status filter">

@@ -37,6 +37,7 @@ import {
 import {versionBanner, shouldEnforceReadOnly} from "../lib/version";
 import EditorErrorBoundary from "./EditorErrorBoundary";
 import MetadataSidebar, {type PostMetadataState} from "./MetadataSidebar";
+import ThemeToggle from "./ThemeToggle";
 
 type Props = {
 	site: Site;
@@ -103,6 +104,29 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	const saverRef = useRef<ReturnType<typeof createSaver> | null>(null);
 	const changeFilterRef = useRef(createChangeFilter());
 	const editorErrorRef = useRef(false);
+
+	// Computed synchronously so the guard is correct on the very first render
+	// (stable callbacks read it through the ref).
+	const isReadOnly = shouldEnforceReadOnly(site.version) && !readOnlyOverride;
+	const isReadOnlyRef = useRef(isReadOnly);
+	isReadOnlyRef.current = isReadOnly;
+
+	const [isDark, setIsDark] = useState(
+		() =>
+			typeof document !== "undefined" &&
+			document.documentElement.classList.contains("dark"),
+	);
+
+	useEffect(() => {
+		function onThemeChange(event: Event) {
+			const detail = (event as CustomEvent<{isDark: boolean}>).detail;
+			if (detail && typeof detail.isDark === "boolean") {
+				setIsDark(detail.isDark);
+			}
+		}
+		window.addEventListener("geist:theme-change", onThemeChange);
+		return () => window.removeEventListener("geist:theme-change", onThemeChange);
+	}, []);
 
 	const bindPost = useCallback(
 		(p: PostDetail) => {
@@ -203,15 +227,19 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 			...buildCardConfig(site, {
 				settings,
 				snippets,
+				postVisibility: post?.visibility,
 				onSnippetsChanged: refreshSnippets,
 			}),
 			fetchEmbed: (url: string, {type}: {type: string}) =>
 				fetchEmbed(site, url, type),
 		}),
-		[site, settings, snippets, refreshSnippets],
+		[site, settings, snippets, refreshSnippets, post?.visibility],
 	);
 
 	const handleBody = useCallback((state: unknown) => {
+		if (isReadOnlyRef.current) {
+			return; // version guard is active; never queue edits
+		}
 		if (editorErrorRef.current) {
 			return; // the editor is in a failed state; never save its body
 		}
@@ -231,12 +259,18 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	}, []);
 
 	const handleTitle = useCallback((value: string) => {
+		if (isReadOnlyRef.current) {
+			return;
+		}
 		setTitle(value);
 		saverRef.current?.queueDebounced({title: value});
 	}, []);
 
 	const handleMetaChange = useCallback(
 		(nextMeta: PostMetadataState, patch: Record<string, unknown>) => {
+			if (isReadOnlyRef.current) {
+				return;
+			}
 			setMeta(nextMeta);
 			saverRef.current?.queueDebounced(patch, 900);
 		},
@@ -248,6 +282,9 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		function onKeyDown(e: KeyboardEvent) {
 			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
 				e.preventDefault();
+				if (isReadOnlyRef.current) {
+					return;
+				}
 				saverRef.current?.flush(true);
 			}
 		}
@@ -476,7 +513,6 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 
 	const canPublish = canPublishRole(site.role);
 	const banner = versionBanner(site.version);
-	const isReadOnly = shouldEnforceReadOnly(site.version) && !readOnlyOverride;
 
 	return (
 		<div className={sidebarOpen ? "editor-shell with-sidebar" : "editor-shell"}>
@@ -492,6 +528,8 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 					<span className={`status status-${status}`} data-testid="save-status">
 						{STATUS_COPY[status]}
 					</span>
+
+					<ThemeToggle />
 
 					<div className="preview-group">
 						<select
@@ -528,7 +566,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 						(post.status === "published" ? (
 							<button
 								onClick={() => handlePublish("draft")}
-								disabled={publishing}
+								disabled={publishing || isReadOnly}
 							>
 								Unpublish
 							</button>
@@ -536,7 +574,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 							<button
 								className="primary-button"
 								onClick={() => handlePublish("published")}
-								disabled={publishing}
+								disabled={publishing || isReadOnly}
 							>
 								Publish
 							</button>
@@ -629,6 +667,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 					className="title-input"
 					value={title}
 					onChange={e => handleTitle(e.target.value)}
+					readOnly={isReadOnly}
 					placeholder="Post title"
 					data-testid="title-input"
 				/>
@@ -656,7 +695,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 						>
 							<KoenigComposer
 								initialEditorState={post.lexical}
-								darkMode={document.documentElement.classList.contains("dark")}
+								darkMode={isDark}
 								fileUploader={fileUploader}
 								cardConfig={cardConfig}
 								onError={handleEditorError}
@@ -686,6 +725,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 					onChange={handleMetaChange}
 					onDeletePost={handleDeletePost}
 					onClose={() => setSidebarOpen(false)}
+					readOnly={isReadOnly}
 				/>
 			)}
 		</div>
