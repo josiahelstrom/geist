@@ -30,6 +30,7 @@ import {
 } from "../lib/cardConfig";
 import {makeFileUploader} from "../lib/uploader";
 import {
+	MAX_EXCERPT_LENGTH,
 	canPublishRole,
 	deletePost,
 	fetchEmbed,
@@ -48,7 +49,6 @@ import EditorErrorBoundary from "./EditorErrorBoundary";
 import MetadataSidebar, {type PostMetadataState} from "./MetadataSidebar";
 import PublishModal, {type PublishAction} from "./PublishModal";
 import RevisionsDrawer from "./RevisionsDrawer";
-import ThemeToggle from "./ThemeToggle";
 
 type Props = {
 	site: Site;
@@ -65,6 +65,79 @@ const STATUS_COPY: Record<SaveStatus, string> = {
 	conflict: "Conflict",
 	error: "Save failed",
 };
+
+/** Walk a Lexical editor-state JSON tree and collect its text runs. */
+function textFromLexicalNode(node: unknown): string {
+	if (!node || typeof node !== "object") {
+		return "";
+	}
+	const value = node as {
+		text?: unknown;
+		type?: unknown;
+		children?: unknown[];
+	};
+	let text = typeof value.text === "string" ? value.text : "";
+	if (value.type === "linebreak") {
+		text += " ";
+	}
+	if (Array.isArray(value.children)) {
+		text += ` ${value.children.map(textFromLexicalNode).join(" ")}`;
+	}
+	return text;
+}
+
+/** Count words in the serialised Lexical state, independent of the saver. */
+function countWords(lexical: string): number {
+	if (!lexical.trim()) {
+		return 0;
+	}
+	try {
+		const parsed = JSON.parse(lexical) as unknown;
+		const text = textFromLexicalNode(parsed).trim();
+		return text ? (text.match(/\S+/g)?.length ?? 0) : 0;
+	} catch {
+		// A half-written state must never break the editor chrome.
+		return 0;
+	}
+}
+
+const iconProps = {
+	width: 16,
+	height: 16,
+	viewBox: "0 0 16 16",
+	fill: "none",
+	stroke: "currentColor",
+	strokeWidth: 1.5,
+	strokeLinecap: "round" as const,
+	strokeLinejoin: "round" as const,
+	"aria-hidden": true,
+};
+
+function ArrowLeftIcon() {
+	return (
+		<svg {...iconProps}>
+			<path d="M10.75 3.5 5.25 8l5.5 4.5" />
+		</svg>
+	);
+}
+
+function HistoryIcon() {
+	return (
+		<svg {...iconProps}>
+			<circle cx="8" cy="8" r="5.75" />
+			<path d="M8 4.75V8l2.25 1.5" />
+		</svg>
+	);
+}
+
+function SidebarIcon() {
+	return (
+		<svg {...iconProps}>
+			<rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" />
+			<path d="M6.25 2.75v10.5" />
+		</svg>
+	);
+}
 
 function metaFromPost(p: PostDetail): PostMetadataState {
 	return {
@@ -120,11 +193,13 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	const [editorError, setEditorError] = useState<string | null>(null);
 	const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
 	const [snippets, setSnippets] = useState<Snippet[]>([]);
+	const [wordCount, setWordCount] = useState(0);
 
 	const saverRef = useRef<ReturnType<typeof createSaver> | null>(null);
 	const changeFilterRef = useRef(createChangeFilter());
 	const editorErrorRef = useRef(false);
 	const activePostIdRef = useRef(postId);
+	const excerptRef = useRef<HTMLTextAreaElement | null>(null);
 
 	useEffect(() => {
 		activePostIdRef.current = postId;
@@ -152,6 +227,25 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		window.addEventListener("geist:theme-change", onThemeChange);
 		return () => window.removeEventListener("geist:theme-change", onThemeChange);
 	}, []);
+
+	// The floating word count is chrome, not document content: it updates on a
+	// short debounce and never participates in saving.
+	useEffect(() => {
+		const timer = window.setTimeout(() => {
+			setWordCount(countWords(lexical));
+		}, 250);
+		return () => window.clearTimeout(timer);
+	}, [lexical]);
+
+	// The excerpt is a borderless, auto-growing inline field.
+	useEffect(() => {
+		const el = excerptRef.current;
+		if (!el) {
+			return;
+		}
+		el.style.height = "auto";
+		el.style.height = `${el.scrollHeight}px`;
+	}, [meta.customExcerpt]);
 
 	const bindPost = useCallback(
 		(p: PostDetail) => {
@@ -351,6 +445,22 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [postId, refreshRevisions]);
+
+	// The native menu's "Save Revision" item dispatches this event so it takes
+	// exactly the same path as the Cmd+S shortcut above.
+	useEffect(() => {
+		function onSaveRevision() {
+			if (isReadOnlyRef.current) {
+				return;
+			}
+			saverRef.current
+				?.flush(true)
+				.then(() => refreshRevisions(activePostIdRef.current));
+		}
+		window.addEventListener("geist:save-revision", onSaveRevision);
+		return () =>
+			window.removeEventListener("geist:save-revision", onSaveRevision);
+	}, [refreshRevisions]);
 
 	// Warn before closing with unsaved work.
 	useEffect(() => {
@@ -720,243 +830,313 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		<div className={hasDrawer ? "editor-shell with-sidebar" : "editor-shell"}>
 			<div className="editor">
 				<header className="editor-header">
-					<button onClick={handleBack} data-testid="back-button">
-						← Posts
-					</button>
-					<span className="muted">
-						{site.title} · <span className={`badge badge-${post.status}`}>{post.status}</span>
-					</span>
-					{post.status === "scheduled" && post.published_at && (
-						<span className="muted small" data-testid="scheduled-hint">
-							Scheduled for{" "}
-							{new Date(post.published_at).toLocaleString()}
+					<div className="editor-topbar-left">
+						<button
+							type="button"
+							className="editor-icon-button"
+							onClick={handleBack}
+							title="Back to posts"
+							aria-label="Back to posts"
+							data-testid="back-button"
+						>
+							<ArrowLeftIcon />
+						</button>
+						<span className="editor-breadcrumb" aria-live="polite">
+							<span className={`badge badge-${post.status}`}>
+								{post.status}
+							</span>
+							<span className="editor-breadcrumb-sep" aria-hidden="true">
+								-
+							</span>
+							<span
+								className={`status status-${status}`}
+								data-testid="save-status"
+							>
+								{status === "clean" ? "Saved" : STATUS_COPY[status]}
+							</span>
 						</span>
-					)}
-					<div className="spacer" />
-					<span className={`status status-${status}`} data-testid="save-status">
-						{STATUS_COPY[status]}
-					</span>
-
-					<ThemeToggle />
-
-					<div className="preview-group">
-						<select
-							value={previewMode}
-							onChange={e =>
-								setPreviewMode(e.target.value as PreviewMemberStatus)
-							}
-							aria-label="Preview member status"
-							title="Preview as member tier"
-							data-testid="preview-mode-select"
-						>
-							<option value="default">Preview: Default</option>
-							<option value="anonymous">As Visitor</option>
-							<option value="free">As Free Member</option>
-							<option value="paid">As Paid Member</option>
-						</select>
-						<button
-							onClick={handleInAppPreview}
-							title="Open in-app preview window"
-							data-testid="preview-window-button"
-						>
-							Preview
-						</button>
-						<button
-							onClick={handleBrowserPreview}
-							title="Open preview in default browser"
-							data-testid="preview-browser-button"
-						>
-							↗
-						</button>
-					</div>
-
-					{canPublish &&
-						(post.status === "published" || post.status === "sent" ? (
-							<button
-								onClick={() => handlePublish("draft")}
-								disabled={publishing || isReadOnly}
+						{post.status === "scheduled" && post.published_at && (
+							<span
+								className="editor-scheduled-hint"
+								data-testid="scheduled-hint"
 							>
-								Unpublish
-							</button>
-						) : post.status === "scheduled" ? (
-							<>
-								<button
-									type="button"
-									onClick={handleUnschedule}
-									disabled={publishing || isReadOnly}
-								>
-									Unschedule
-								</button>
-								<button
-									type="button"
-									onClick={() => setPublishModalOpen(true)}
-									disabled={publishing || isReadOnly}
-								>
-									Reschedule / Publish…
-								</button>
-							</>
-						) : (
-							<button
-								className="primary-button"
-								onClick={() => setPublishModalOpen(true)}
-								disabled={publishing || isReadOnly}
-								data-testid="open-publish-modal-button"
-							>
-								Publish…
-							</button>
-						))}
-
-					<button
-						type="button"
-						className={drawer === "settings" ? "active-button" : ""}
-						onClick={() =>
-							setDrawer(current =>
-								current === "settings" ? "none" : "settings",
-							)
-						}
-						title="Toggle post settings sidebar"
-						data-testid="toggle-sidebar-button"
-					>
-						Settings
-					</button>
-
-					<button
-						type="button"
-						className={drawer === "revisions" ? "active-button" : ""}
-						onClick={() =>
-							setDrawer(current =>
-								current === "revisions" ? "none" : "revisions",
-							)
-						}
-						title="Toggle post history"
-						data-testid="toggle-revisions-button"
-					>
-						History
-					</button>
-				</header>
-
-				{banner && (
-					<div className="warn-banner">
-						<span>{banner}</span>
-						{shouldEnforceReadOnly(site.version) && !readOnlyOverride && (
-							<button
-								type="button"
-								onClick={() => setReadOnlyOverride(true)}
-								data-testid="override-version-guard-button"
-							>
-								Enable editing anyway
-							</button>
+								{new Date(post.published_at).toLocaleString()}
+							</span>
 						)}
 					</div>
-				)}
 
-				{conflict && (
-					<div className="warn-banner" data-testid="conflict">
-						<div>
-							<strong>Conflict (409)</strong> — someone else saved a newer
-							version of this post. Autosave is paused so nobody's work is
-							clobbered.
-						</div>
-						<div className="banner-actions">
+					<div className="editor-actions" role="toolbar" aria-label="Post actions">
+						<div className="preview-group">
+							<select
+								value={previewMode}
+								onChange={e =>
+									setPreviewMode(e.target.value as PreviewMemberStatus)
+								}
+								aria-label="Preview member status"
+								title="Preview as member tier"
+								data-testid="preview-mode-select"
+							>
+								<option value="default">Preview: Default</option>
+								<option value="anonymous">As Visitor</option>
+								<option value="free">As Free Member</option>
+								<option value="paid">As Paid Member</option>
+							</select>
 							<button
 								type="button"
-								onClick={handleReloadServerVersion}
-								data-testid="conflict-reload-button"
+								className="editor-action"
+								onClick={handleInAppPreview}
+								title="Open in-app preview window"
+								data-testid="preview-window-button"
 							>
-								Reload server version
+								Preview
 							</button>
 							<button
 								type="button"
-								onClick={handleOverwriteConflict}
-								data-testid="conflict-overwrite-button"
+								className="editor-icon-button"
+								onClick={handleBrowserPreview}
+								title="Open preview in default browser"
+								aria-label="Open preview in default browser"
+								data-testid="preview-browser-button"
 							>
-								Keep my edits & overwrite
+								↗
 							</button>
 						</div>
+
+						{canPublish &&
+							(post.status === "published" || post.status === "sent" ? (
+								<button
+									type="button"
+									className="editor-action"
+									onClick={() => handlePublish("draft")}
+									disabled={publishing || isReadOnly}
+								>
+									Unpublish
+								</button>
+							) : post.status === "scheduled" ? (
+								<>
+									<button
+										type="button"
+										className="editor-action"
+										onClick={handleUnschedule}
+										disabled={publishing || isReadOnly}
+									>
+										Unschedule
+									</button>
+									<button
+										type="button"
+										className="editor-action editor-action-publish"
+										onClick={() => setPublishModalOpen(true)}
+										disabled={publishing || isReadOnly}
+									>
+										Reschedule / Publish…
+									</button>
+								</>
+							) : (
+								<button
+									type="button"
+									className="editor-action editor-action-publish"
+									onClick={() => setPublishModalOpen(true)}
+									disabled={publishing || isReadOnly}
+									data-testid="open-publish-modal-button"
+								>
+									Publish
+								</button>
+							))}
+
+						<button
+							type="button"
+							className={
+								drawer === "revisions"
+									? "editor-icon-button is-active"
+									: "editor-icon-button"
+							}
+							onClick={() =>
+								setDrawer(current =>
+									current === "revisions" ? "none" : "revisions",
+								)
+							}
+							title="Toggle post history"
+							aria-label="Toggle post history"
+							aria-pressed={drawer === "revisions"}
+							data-testid="toggle-revisions-button"
+						>
+							<HistoryIcon />
+						</button>
+
+						<button
+							type="button"
+							className={
+								drawer === "settings"
+									? "editor-icon-button is-active"
+									: "editor-icon-button"
+							}
+							onClick={() =>
+								setDrawer(current =>
+									current === "settings" ? "none" : "settings",
+								)
+							}
+							title="Toggle post settings sidebar"
+							aria-label="Toggle post settings sidebar"
+							aria-pressed={drawer === "settings"}
+							data-testid="toggle-sidebar-button"
+						>
+							<SidebarIcon />
+						</button>
 					</div>
-				)}
+				</header>
 
-				{status === "error" && statusMessage && (
-					<div className="error-banner" role="alert" data-testid="save-error-banner">
-						<span>Save failed: {statusMessage}</span>
-						<div className="banner-actions">
-							<button
-								type="button"
-								onClick={() => saverRef.current?.flush()}
-								data-testid="retry-save-button"
-							>
-								Retry save
-							</button>
-							{onReconnect && (
-								<button type="button" onClick={onReconnect}>
-									Reconnect
+				<div className="editor-canvas">
+					{banner && (
+						<div className="warn-banner">
+							<span>{banner}</span>
+							{shouldEnforceReadOnly(site.version) && !readOnlyOverride && (
+								<button
+									type="button"
+									onClick={() => setReadOnlyOverride(true)}
+									data-testid="override-version-guard-button"
+								>
+									Enable editing anyway
 								</button>
 							)}
 						</div>
-					</div>
-				)}
+					)}
 
-				{error && (
-					<div className="error-banner" role="alert">
-						<span>{error}</span>
-						<div className="banner-actions">
-							<button type="button" onClick={() => setError(null)}>
-								Dismiss
-							</button>
+					{conflict && (
+						<div className="warn-banner" data-testid="conflict">
+							<div>
+								<strong>Conflict (409)</strong> — someone else saved a newer
+								version of this post. Autosave is paused so nobody's work is
+								clobbered.
+							</div>
+							<div className="banner-actions">
+								<button
+									type="button"
+									onClick={handleReloadServerVersion}
+									data-testid="conflict-reload-button"
+								>
+									Reload server version
+								</button>
+								<button
+									type="button"
+									onClick={handleOverwriteConflict}
+									data-testid="conflict-overwrite-button"
+								>
+									Keep my edits & overwrite
+								</button>
+							</div>
 						</div>
-					</div>
-				)}
+					)}
 
-				<input
-					className="title-input"
-					value={title}
-					onChange={e => handleTitle(e.target.value)}
-					readOnly={isReadOnly}
-					placeholder="Post title"
-					data-testid="title-input"
-				/>
+					{status === "error" && statusMessage && (
+						<div className="error-banner" role="alert" data-testid="save-error-banner">
+							<span>Save failed: {statusMessage}</span>
+							<div className="banner-actions">
+								<button
+									type="button"
+									onClick={() => saverRef.current?.flush()}
+									data-testid="retry-save-button"
+								>
+									Retry save
+								</button>
+								{onReconnect && (
+									<button type="button" onClick={onReconnect}>
+										Reconnect
+									</button>
+								)}
+							</div>
+						</div>
+					)}
 
-				{/* key forces a clean editor when switching posts or reloading from server */}
-				{editorError ? (
-					renderEditorFallback(editorError)
-				) : (
-					<EditorErrorBoundary
-						key={`${post.id}-${editorVersion}`}
-						fallback={renderEditorFallback}
-						onCatch={message => {
-							editorErrorRef.current = true;
-							setEditorError(message);
-						}}
-					>
-						<div
-							style={{display: "contents"}}
-							onKeyDownCapture={markInteraction}
-							onPointerDownCapture={markInteraction}
-							onPasteCapture={markInteraction}
-							onDropCapture={markInteraction}
-							onBeforeInputCapture={markInteraction}
-							onCompositionStartCapture={markInteraction}
+					{error && (
+						<div className="error-banner" role="alert">
+							<span>{error}</span>
+							<div className="banner-actions">
+								<button type="button" onClick={() => setError(null)}>
+									Dismiss
+								</button>
+							</div>
+						</div>
+					)}
+
+					<input
+						className="title-input"
+						value={title}
+						onChange={e => handleTitle(e.target.value)}
+						readOnly={isReadOnly}
+						placeholder="Post title"
+						data-testid="title-input"
+					/>
+
+					<textarea
+						ref={excerptRef}
+						className="editor-excerpt"
+						value={meta.customExcerpt}
+						onChange={e =>
+							handleMetaChange(
+								{...meta, customExcerpt: e.target.value},
+								{custom_excerpt: e.target.value || null},
+							)
+						}
+						readOnly={isReadOnly}
+						rows={1}
+						maxLength={MAX_EXCERPT_LENGTH}
+						placeholder="Add an excerpt"
+						spellCheck
+						data-testid="excerpt-input-inline"
+					/>
+
+					<div className="editor-divider" role="separator" />
+
+					{/* key forces a clean editor when switching posts or reloading from server */}
+					{editorError ? (
+						renderEditorFallback(editorError)
+					) : (
+						<EditorErrorBoundary
+							key={`${post.id}-${editorVersion}`}
+							fallback={renderEditorFallback}
+							onCatch={message => {
+								editorErrorRef.current = true;
+								setEditorError(message);
+							}}
 						>
-							<KoenigComposer
-								initialEditorState={post.lexical}
-								darkMode={isDark}
-								fileUploader={fileUploader}
-								cardConfig={cardConfig}
-								onError={handleEditorError}
+							<div
+								style={{display: "contents"}}
+								onKeyDownCapture={markInteraction}
+								onPointerDownCapture={markInteraction}
+								onPasteCapture={markInteraction}
+								onDropCapture={markInteraction}
+								onBeforeInputCapture={markInteraction}
+								onCompositionStartCapture={markInteraction}
 							>
-								<KoenigEditor
-									onChange={handleBody}
-									placeholderText="Begin writing…"
-									readOnly={isReadOnly}
-								/>
-							</KoenigComposer>
-						</div>
-					</EditorErrorBoundary>
-				)}
+								<KoenigComposer
+									initialEditorState={post.lexical}
+									darkMode={isDark}
+									fileUploader={fileUploader}
+									cardConfig={cardConfig}
+									onError={handleEditorError}
+								>
+									<KoenigEditor
+										onChange={handleBody}
+										placeholderText="Begin writing…"
+										readOnly={isReadOnly}
+									/>
+								</KoenigComposer>
+							</div>
+						</EditorErrorBoundary>
+					)}
+				</div>
 
-				<p className="muted small">
-					{lexical.length.toLocaleString()} characters · Cmd+S saves a revision
-				</p>
+				<div
+					className={
+						hasDrawer
+							? "editor-word-count with-sidebar"
+							: "editor-word-count"
+					}
+					title="Cmd+S saves a revision"
+					data-testid="word-count"
+				>
+					{wordCount.toLocaleString()} {wordCount === 1 ? "word" : "words"}
+				</div>
 			</div>
 
 			{drawer === "settings" && (

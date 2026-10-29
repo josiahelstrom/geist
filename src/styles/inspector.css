@@ -1,0 +1,705 @@
+/*
+ * Right inspector drawer — MetadataSidebar and RevisionsDrawer.
+ *
+ * Source of truth: docs/design-system.md §4.6 (drawer shell, disclosure
+ * sections, revision rows) and §5 (appearance matrix). App.css is loaded after
+ * this file, so interactive rules are doubled where they must win the cascade.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Shell
+ * ------------------------------------------------------------------------- */
+
+.inspector.inspector {
+	display: flex;
+	flex-direction: column;
+	width: var(--inspector-width);
+	height: calc(100vh - var(--titlebar-height));
+	position: sticky;
+	top: 0;
+	gap: 0;
+	padding: 0;
+	box-sizing: border-box;
+	overflow: hidden;
+	background: var(--bg-sidebar);
+	border-left: 1px solid var(--border-default);
+	color: var(--fg-primary);
+	animation: inspector-slide-in var(--motion-duration) var(--motion-ease);
+}
+
+.inspector.revisions-drawer {
+	width: 340px;
+}
+
+/* Give the revisions panel the extra 20px it needs inside the shell grid. */
+.editor-shell.editor-shell.with-sidebar:has(.revisions-drawer) {
+	grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.editor-shell.editor-shell.with-sidebar:has(.revisions-drawer)
+	.editor-word-count.with-sidebar {
+	right: calc(340px + var(--space-5));
+}
+
+@keyframes inspector-slide-in {
+	from {
+		opacity: 0;
+		transform: translateX(16px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+.inspector .inspector-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex: 0 0 44px;
+	height: 44px;
+	padding: 0 var(--space-4);
+	border-bottom: 1px solid var(--border-subtle);
+	background: var(--bg-sidebar);
+	z-index: 2;
+}
+
+.inspector .inspector-title {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.2;
+	letter-spacing: -0.01em;
+	color: var(--fg-primary);
+}
+
+.inspector .inspector-scroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding-bottom: var(--space-2);
+}
+
+/* ---------------------------------------------------------------------------
+ * Disclosure sections (§4.6)
+ * ------------------------------------------------------------------------- */
+
+.inspector .inspector-section {
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.inspector.inspector button.inspector-disclosure {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	height: 32px;
+	padding: 0 var(--space-4);
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--fg-primary);
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	text-align: left;
+}
+
+.inspector.inspector button.inspector-disclosure:hover:not(:disabled) {
+	background: transparent;
+}
+
+.inspector .inspector-disclosure .disclosure-chevron {
+	flex: 0 0 auto;
+	color: var(--fg-secondary);
+	transition: transform var(--motion-duration) var(--motion-ease);
+}
+
+.inspector .inspector-section.is-open .disclosure-chevron {
+	transform: rotate(90deg);
+}
+
+.inspector .disclosure-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.inspector .disclosure-count {
+	flex: 0 0 auto;
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--fg-muted);
+}
+
+.inspector .inspector-section-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	padding: 2px var(--space-4) var(--space-3);
+}
+
+.inspector .inspector-section-body[hidden] {
+	display: none;
+}
+
+.inspector .inspector-label {
+	font-size: 11px;
+	font-weight: 500;
+	line-height: 1.3;
+	color: var(--fg-secondary);
+}
+
+.inspector .inspector-label-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+
+.inspector .inspector-hint {
+	margin: 0;
+	font-size: 11px;
+	line-height: 1.4;
+	color: var(--fg-muted);
+}
+
+.inspector .inspector-error {
+	margin: 0;
+	padding: 6px 8px;
+	border-radius: var(--radius-md);
+	background: color-mix(in srgb, var(--status-danger) 10%, transparent);
+	color: var(--status-danger);
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.inspector .inspector-char-count {
+	font-size: 11px;
+	color: var(--fg-muted);
+}
+
+.inspector .inspector-char-count.is-over {
+	color: var(--status-danger);
+	font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+ * Fields & controls — 28px compact, 32px standard (§4.6)
+ * ------------------------------------------------------------------------- */
+
+.inspector.inspector .inspector-input,
+.inspector.inspector .inspector-select,
+.inspector.inspector .inspector-textarea {
+	width: 100%;
+	box-sizing: border-box;
+	background: var(--bg-canvas);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-md);
+	color: var(--fg-primary);
+	font-size: 13px;
+	line-height: 1.4;
+	transition: border-color var(--motion-duration) var(--motion-ease),
+		box-shadow var(--motion-duration) var(--motion-ease);
+}
+
+.inspector.inspector .inspector-input,
+.inspector.inspector .inspector-select {
+	height: var(--control-height-compact);
+	padding: 0 var(--space-2);
+}
+
+.inspector.inspector .inspector-select {
+	padding-right: var(--space-1);
+}
+
+.inspector.inspector .inspector-textarea {
+	min-height: 64px;
+	padding: 6px var(--space-2);
+	resize: vertical;
+}
+
+.inspector.inspector .inspector-input::placeholder,
+.inspector.inspector .inspector-textarea::placeholder {
+	color: var(--fg-tertiary);
+	opacity: 1;
+}
+
+.inspector.inspector .inspector-input:focus,
+.inspector.inspector .inspector-select:focus,
+.inspector.inspector .inspector-textarea:focus {
+	outline: none;
+	border-color: var(--fg-muted);
+}
+
+.inspector.inspector .inspector-input:focus-visible,
+.inspector.inspector .inspector-select:focus-visible,
+.inspector.inspector .inspector-textarea:focus-visible {
+	outline: 2px solid
+		color-mix(in srgb, var(--accent-primary-bg) 30%, transparent);
+	outline-offset: 1px;
+}
+
+.inspector.inspector .inspector-input:disabled,
+.inspector.inspector .inspector-select:disabled,
+.inspector.inspector .inspector-textarea:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+/* ---------------------------------------------------------------------------
+ * Buttons
+ * ------------------------------------------------------------------------- */
+
+.inspector.inspector button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-height: var(--control-height-compact);
+	padding: 0 var(--space-2);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-md);
+	background: var(--bg-canvas);
+	color: var(--fg-primary);
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 1;
+	cursor: pointer;
+	transition: background-color var(--motion-duration) var(--motion-ease),
+		border-color var(--motion-duration) var(--motion-ease),
+		transform 50ms ease;
+}
+
+.inspector.inspector button:hover:not(:disabled) {
+	background: var(--bg-row-hover);
+}
+
+.inspector.inspector button:active:not(:disabled) {
+	transform: scale(0.985);
+}
+
+.inspector.inspector button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.inspector.inspector button:focus-visible {
+	outline: 2px solid
+		color-mix(in srgb, var(--accent-primary-bg) 30%, transparent);
+	outline-offset: 1px;
+}
+
+.inspector.inspector button.inspector-close {
+	width: var(--control-height-compact);
+	height: var(--control-height-compact);
+	min-height: var(--control-height-compact);
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--fg-secondary);
+	font-size: 13px;
+}
+
+.inspector.inspector button.inspector-close:hover:not(:disabled) {
+	background: var(--bg-row-selected);
+	color: var(--fg-primary);
+}
+
+.inspector.inspector button.inspector-secondary-button {
+	background: var(--bg-canvas);
+	border-color: var(--border-default);
+	color: var(--fg-primary);
+}
+
+.inspector.inspector button.inspector-secondary-button:hover:not(:disabled) {
+	background: var(--bg-row-hover);
+}
+
+.inspector.inspector button.inspector-primary-button {
+	height: var(--control-height);
+	background: var(--accent-primary-bg);
+	border-color: var(--accent-primary-bg);
+	color: var(--accent-primary-fg);
+	font-weight: 500;
+}
+
+.inspector.inspector button.inspector-primary-button:hover:not(:disabled) {
+	opacity: 0.9;
+	background: var(--accent-primary-bg);
+}
+
+.inspector.inspector button.inspector-danger-button {
+	background: transparent;
+	border-color: color-mix(in srgb, var(--status-danger) 30%, transparent);
+	color: var(--status-danger);
+}
+
+.inspector.inspector button.inspector-danger-button:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--status-danger) 10%, transparent);
+}
+
+.inspector.inspector button.inspector-upload {
+	width: 100%;
+	height: 64px;
+	border-style: dashed;
+	border-color: var(--border-default);
+	background: transparent;
+	color: var(--fg-secondary);
+	font-size: 12px;
+}
+
+.inspector.inspector button.inspector-upload:hover:not(:disabled) {
+	background: var(--bg-row-hover);
+	color: var(--fg-primary);
+}
+
+.inspector .inspector-inline-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+}
+
+.inspector .inspector-inline-row .inspector-input,
+.inspector .inspector-inline-row .inspector-select {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.inspector .inspector-checkbox {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: var(--row-height);
+	font-size: 13px;
+	color: var(--fg-primary);
+	cursor: pointer;
+}
+
+.inspector .inspector-checkbox input[type="checkbox"] {
+	width: 14px;
+	height: 14px;
+	margin: 0;
+	accent-color: var(--accent-primary-bg);
+}
+
+/* ---------------------------------------------------------------------------
+ * Chips (tags, authors, tiers)
+ * ------------------------------------------------------------------------- */
+
+.inspector .inspector-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-1);
+}
+
+.inspector .inspector-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 100%;
+	height: 22px;
+	padding: 0 var(--space-2);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-pill);
+	background: var(--bg-canvas);
+	color: var(--fg-secondary);
+	font-size: 11px;
+	font-weight: 500;
+	line-height: 1;
+}
+
+.inspector .inspector-chip.is-primary {
+	background: var(--bg-row-selected);
+	color: var(--fg-primary);
+}
+
+.inspector.inspector button.inspector-chip-remove {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 12px;
+	height: 12px;
+	min-height: 0;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-pill);
+	background: transparent;
+	color: inherit;
+	font-size: 11px;
+	line-height: 1;
+}
+
+.inspector.inspector button.inspector-chip-remove:hover:not(:disabled) {
+	background: var(--border-default);
+	color: var(--fg-primary);
+}
+
+/* ---------------------------------------------------------------------------
+ * Feature image
+ * ------------------------------------------------------------------------- */
+
+.inspector .inspector-feature {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.inspector .inspector-feature-preview {
+	width: 100%;
+	max-height: 180px;
+	object-fit: cover;
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-sm);
+	background: var(--bg-row-hover);
+}
+
+.inspector .inspector-feature-actions {
+	display: flex;
+	gap: var(--space-1);
+}
+
+.inspector .inspector-feature-actions > button {
+	flex: 1 1 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Footer actions
+ * ------------------------------------------------------------------------- */
+
+.inspector .inspector-footer {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	margin-top: var(--space-2);
+	padding: var(--space-3) var(--space-4) var(--space-4);
+	border-top: 1px solid var(--border-subtle);
+}
+
+.inspector.inspector button.inspector-footer-button {
+	justify-content: flex-start;
+	width: 100%;
+	height: var(--control-height);
+	text-align: left;
+}
+
+/* ---------------------------------------------------------------------------
+ * Revisions history (§4.6)
+ * ------------------------------------------------------------------------- */
+
+.inspector .revisions-empty {
+	margin: 0;
+	padding: var(--space-6) var(--space-4);
+	color: var(--fg-muted);
+	font-size: 12px;
+	line-height: 1.5;
+	text-align: center;
+}
+
+.inspector .revisions-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	list-style: none;
+	margin: 0;
+	padding: var(--space-2);
+}
+
+.inspector.inspector button.revision-row {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-2);
+	width: 100%;
+	min-height: 44px;
+	padding: 6px var(--space-2) 6px var(--space-3);
+	border: 1px solid transparent;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: var(--fg-primary);
+	text-align: left;
+	overflow: hidden;
+}
+
+.inspector.inspector button.revision-row::before {
+	content: "";
+	position: absolute;
+	top: 6px;
+	bottom: 6px;
+	left: 0;
+	width: 2px;
+	border-radius: var(--radius-pill);
+	background: var(--accent-primary-bg);
+	opacity: 0;
+	transition: opacity var(--motion-duration) var(--motion-ease);
+}
+
+.inspector.inspector button.revision-row:hover:not(:disabled) {
+	background: var(--bg-row-hover);
+}
+
+.inspector.inspector button.revision-row.is-selected {
+	background: var(--bg-row-selected);
+	border-color: var(--border-default);
+}
+
+.inspector.inspector button.revision-row.is-selected::before {
+	opacity: 1;
+}
+
+.inspector .revision-row-main {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.inspector .revision-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 13px;
+	font-weight: 500;
+	line-height: 1.25;
+	color: var(--fg-primary);
+}
+
+.inspector .revision-meta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	color: var(--fg-secondary);
+}
+
+.inspector .revision-time {
+	font-size: 12px;
+	color: var(--fg-secondary);
+}
+
+.inspector .revision-author {
+	font-size: 11px;
+	color: var(--fg-muted);
+}
+
+.inspector .revision-time,
+.inspector .revision-author {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.inspector .revision-author::before {
+	content: "·";
+	margin-right: 6px;
+	color: var(--fg-muted);
+}
+
+.inspector .revision-badge {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	height: 18px;
+	padding: 0 6px;
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-pill);
+	background: var(--bg-canvas);
+	color: var(--fg-secondary);
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: 0.01em;
+	line-height: 1;
+	white-space: nowrap;
+}
+
+.inspector .revision-badge.is-save {
+	color: var(--fg-primary);
+	border-color: var(--fg-muted);
+}
+
+.inspector .revision-badge.is-autosave {
+	color: var(--fg-muted);
+}
+
+.inspector .revision-badge.is-published {
+	color: var(--status-publish);
+	border-color: color-mix(in srgb, var(--status-publish) 40%, transparent);
+	background: color-mix(in srgb, var(--status-publish) 10%, transparent);
+}
+
+.inspector .revision-preview {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	margin: var(--space-1) var(--space-3) var(--space-3);
+	padding: var(--space-3);
+	border: 1px solid var(--border-default);
+	border-radius: 8px;
+	background: var(--bg-canvas);
+	box-shadow: var(--shadow-card);
+}
+
+.inspector .revision-preview-header {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.inspector .revision-preview-eyebrow {
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: 0;
+	color: var(--fg-muted);
+}
+
+.inspector .revision-preview-title {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.3;
+	color: var(--fg-primary);
+	overflow-wrap: anywhere;
+}
+
+.inspector .revision-preview-excerpt {
+	margin: 0;
+	font-size: 12px;
+	font-style: italic;
+	line-height: 1.45;
+	color: var(--fg-secondary);
+}
+
+.inspector .revision-preview-body {
+	max-height: 220px;
+	margin: 0;
+	overflow-y: auto;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--fg-secondary);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.inspector.inspector button.revision-restore-button {
+	width: 100%;
+	margin-top: var(--space-1);
+}
+
+/* ---------------------------------------------------------------------------
+ * Reduced transparency (§5): the inspector never relies on vibrancy alone.
+ * ------------------------------------------------------------------------- */
+
+@media (prefers-reduced-transparency: reduce) {
+	.inspector.inspector,
+	.inspector .inspector-header {
+		background: var(--bg-sidebar-solid);
+	}
+}

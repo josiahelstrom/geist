@@ -1,4 +1,4 @@
-import {useRef, useState} from "react";
+import {useRef, useState, type ReactNode} from "react";
 import {
 	api,
 	type AuthorSummary,
@@ -49,6 +49,58 @@ type Props = {
 	/** Version guard is active: render values but block every mutation. */
 	readOnly?: boolean;
 };
+
+type DisclosureProps = {
+	title: string;
+	count?: number;
+	defaultOpen?: boolean;
+	children: ReactNode;
+};
+
+/** A macOS-style disclosure section with a rotating chevron indicator. */
+function Disclosure({
+	title,
+	count,
+	defaultOpen = true,
+	children,
+}: DisclosureProps) {
+	const [open, setOpen] = useState(defaultOpen);
+
+	return (
+		<section className={open ? "inspector-section is-open" : "inspector-section"}>
+			<button
+				type="button"
+				className="inspector-disclosure"
+				aria-expanded={open}
+				onClick={() => setOpen(value => !value)}
+			>
+				<svg
+					className="disclosure-chevron"
+					width="10"
+					height="10"
+					viewBox="0 0 10 10"
+					aria-hidden="true"
+				>
+					<path
+						d="M3.5 1.5 6.5 5 3.5 8.5"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="1.4"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					/>
+				</svg>
+				<span className="disclosure-title">{title}</span>
+				{typeof count === "number" && count > 0 ? (
+					<span className="disclosure-count">{count}</span>
+				) : null}
+			</button>
+			<div className="inspector-section-body" hidden={!open}>
+				{children}
+			</div>
+		</section>
+	);
+}
 
 export default function MetadataSidebar({
 	site,
@@ -272,356 +324,386 @@ export default function MetadataSidebar({
 	);
 
 	return (
-		<aside className="meta-sidebar" data-testid="meta-sidebar">
-			<div className="meta-sidebar-header">
-				<h2>Post settings</h2>
+		<aside
+			className="inspector meta-sidebar"
+			data-testid="meta-sidebar"
+			aria-label="Post settings"
+		>
+			<header className="inspector-header">
+				<h2 className="inspector-title">Post settings</h2>
 				<button
 					type="button"
-					className="icon-button"
+					className="inspector-close"
 					onClick={onClose}
 					title="Close settings"
+					aria-label="Close settings"
 				>
 					✕
 				</button>
-			</div>
+			</header>
 
-			<section className="meta-section">
-				<label className="meta-label">Feature image</label>
-				<input
-					ref={fileInputRef}
-					type="file"
-					accept="image/*"
-					onChange={handleFeatureImageSelect}
-					disabled={readOnly}
-					style={{display: "none"}}
-					data-testid="feature-image-file-input"
-				/>
-				{meta.featureImage ? (
-					<div className="feature-image-card">
-						<img
-							src={meta.featureImage}
-							alt={meta.featureImageAlt || "Feature image"}
-							className="feature-image-preview"
+			<div className="inspector-scroll" data-testid="metadata-sidebar">
+				<Disclosure
+					title="Post access"
+					count={meta.visibility === "tiers" ? meta.tiers.length : undefined}
+				>
+					<label className="inspector-label" htmlFor="post-visibility-select">
+						Who can read this post
+					</label>
+					<select
+						id="post-visibility-select"
+						className="inspector-select"
+						value={meta.visibility}
+						disabled={!canEditVisibility || readOnly}
+						onChange={e => handleVisibilityChange(e.target.value)}
+						data-testid="visibility-select"
+					>
+						<option value="public">Public</option>
+						<option value="members">Members only</option>
+						<option value="paid">Paid-members only</option>
+						<option value="tiers">Specific tiers</option>
+					</select>
+					{meta.visibility === "tiers" && (
+						<>
+							{meta.tiers.length > 0 && (
+								<div className="inspector-chips" data-testid="post-tiers">
+									{meta.tiers.map(tier => (
+										<span key={tier.id} className="inspector-chip">
+											{tier.name}
+											<button
+												type="button"
+												className="inspector-chip-remove"
+												onClick={() => handleRemoveTier(tier.id)}
+												disabled={!canEditVisibility || readOnly}
+												aria-label={`Remove tier ${tier.name}`}
+											>
+												×
+											</button>
+										</span>
+									))}
+								</div>
+							)}
+							<select
+								className="inspector-select"
+								value=""
+								onChange={e => handleAddTier(e.target.value)}
+								disabled={
+									!canEditVisibility ||
+									readOnly ||
+									availableTiers.length === 0
+								}
+								aria-label="Add a tier"
+								data-testid="tier-select"
+							>
+								<option value="">Add a tier…</option>
+								{availableTiers.map(tier => (
+									<option key={tier.id} value={tier.id}>
+										{tier.name}
+									</option>
+								))}
+							</select>
+						</>
+					)}
+					{!canEditVisibility && (
+						<p className="inspector-hint">
+							Your role ({site.role}) cannot change post access.
+						</p>
+					)}
+
+					<label className="inspector-checkbox">
+						<input
+							type="checkbox"
+							checked={meta.featured}
+							onChange={e =>
+								updateField("featured", e.target.checked, {
+									featured: e.target.checked,
+								})
+							}
+							disabled={readOnly}
+							data-testid="featured-checkbox"
 						/>
-						<div className="feature-image-actions">
-							<button
-								type="button"
-								onClick={() => fileInputRef.current?.click()}
-								disabled={uploadingImage || readOnly}
-							>
-								{uploadingImage ? "Uploading…" : "Replace"}
-							</button>
-							<button
-								type="button"
-								onClick={handleRemoveFeatureImage}
-								disabled={uploadingImage || readOnly}
-							>
-								Remove
-							</button>
+						<span>Feature this post</span>
+					</label>
+				</Disclosure>
+
+				<Disclosure title="Tags" count={meta.tags.length}>
+					{meta.tags.length > 0 && (
+						<div className="inspector-chips" data-testid="post-tags">
+							{meta.tags.map((tag, idx) => (
+								<span
+									key={`${tag.slug ?? tag.name}-${idx}`}
+									className={
+										idx === 0
+											? "inspector-chip is-primary"
+											: "inspector-chip"
+									}
+									title={idx === 0 ? "Primary tag" : undefined}
+								>
+									{tag.name}
+									<button
+										type="button"
+										className="inspector-chip-remove"
+										onClick={() => handleRemoveTag(idx)}
+										disabled={readOnly}
+										aria-label={`Remove tag ${tag.name}`}
+									>
+										×
+									</button>
+								</span>
+							))}
 						</div>
+					)}
+					<div className="inspector-inline-row">
 						<input
-							value={meta.featureImageAlt}
-							maxLength={MAX_FEATURE_IMAGE_ALT_LENGTH}
-							onChange={e =>
-								updateField("featureImageAlt", e.target.value, {
-									feature_image_alt: e.target.value || null,
-								})
-							}
-							placeholder="Alt text (describes image)"
+							id="post-tag-input"
+							className="inspector-input"
+							list="geist-site-tags"
+							value={tagInput}
+							onChange={e => setTagInput(e.target.value)}
+							onKeyDown={e => {
+								if (e.key === "Enter" || e.key === ",") {
+									e.preventDefault();
+									handleAddTag(tagInput);
+								}
+							}}
+							placeholder="Add a tag and press Enter…"
 							disabled={readOnly}
-							data-testid="feature-image-alt"
+							data-testid="tag-input"
 						/>
-						<input
-							value={meta.featureImageCaption}
-							onChange={e =>
-								updateField("featureImageCaption", e.target.value, {
-									feature_image_caption: e.target.value || null,
-								})
-							}
-							placeholder="Caption (optional)"
-							disabled={readOnly}
-							data-testid="feature-image-caption"
-						/>
-					</div>
-				) : (
-					<div className="feature-image-empty">
 						<button
 							type="button"
+							className="inspector-secondary-button"
+							onClick={() => handleAddTag(tagInput)}
+							disabled={readOnly || !tagInput.trim()}
+						>
+							Add
+						</button>
+					</div>
+					<datalist id="geist-site-tags">
+						{siteTags.map(t => (
+							<option key={t.id ?? t.name} value={t.name} />
+						))}
+					</datalist>
+				</Disclosure>
+
+				<Disclosure title="Authors" count={meta.authors.length}>
+					<div className="inspector-chips" data-testid="post-authors">
+						{meta.authors.map(author => (
+							<span key={author.id} className="inspector-chip">
+								{author.name}
+								{canEditAuthors && meta.authors.length > 1 && (
+									<button
+										type="button"
+										className="inspector-chip-remove"
+										onClick={() => handleRemoveAuthor(author.id)}
+										disabled={readOnly}
+										aria-label={`Remove author ${author.name}`}
+									>
+										×
+									</button>
+								)}
+							</span>
+						))}
+					</div>
+					{canEditAuthors && availableAuthors.length > 0 && (
+						<div className="inspector-inline-row">
+							<select
+								className="inspector-select"
+								value={authorSelect}
+								onChange={e => {
+									setAuthorSelect(e.target.value);
+									handleAddAuthor(e.target.value);
+								}}
+								aria-label="Add author"
+								disabled={readOnly}
+								data-testid="author-select"
+							>
+								<option value="">Add co-author…</option>
+								{availableAuthors.map(a => (
+									<option key={a.id} value={a.id}>
+										{a.name}
+									</option>
+								))}
+							</select>
+						</div>
+					)}
+					{!canEditAuthors && (
+						<p className="inspector-hint">
+							Your role ({site.role}) cannot reassign authors.
+						</p>
+					)}
+				</Disclosure>
+
+				<Disclosure title="Feature image">
+					<input
+						ref={fileInputRef}
+						type="file"
+						accept="image/*"
+						onChange={handleFeatureImageSelect}
+						disabled={readOnly}
+						style={{display: "none"}}
+						data-testid="feature-image-file-input"
+					/>
+					{meta.featureImage ? (
+						<div className="inspector-feature">
+							<img
+								src={meta.featureImage}
+								alt={meta.featureImageAlt || "Feature image"}
+								className="inspector-feature-preview"
+							/>
+							<div className="inspector-feature-actions">
+								<button
+									type="button"
+									className="inspector-secondary-button"
+									onClick={() => fileInputRef.current?.click()}
+									disabled={uploadingImage || readOnly}
+								>
+									{uploadingImage ? "Uploading…" : "Replace"}
+								</button>
+								<button
+									type="button"
+									className="inspector-secondary-button"
+									onClick={handleRemoveFeatureImage}
+									disabled={uploadingImage || readOnly}
+								>
+									Remove
+								</button>
+							</div>
+							<input
+								className="inspector-input"
+								value={meta.featureImageAlt}
+								maxLength={MAX_FEATURE_IMAGE_ALT_LENGTH}
+								onChange={e =>
+									updateField("featureImageAlt", e.target.value, {
+										feature_image_alt: e.target.value || null,
+									})
+								}
+								placeholder="Alt text (describes image)"
+								disabled={readOnly}
+								data-testid="feature-image-alt"
+							/>
+							<input
+								className="inspector-input"
+								value={meta.featureImageCaption}
+								onChange={e =>
+									updateField(
+										"featureImageCaption",
+										e.target.value,
+										{
+											feature_image_caption:
+												e.target.value || null,
+										},
+									)
+								}
+								placeholder="Caption (optional)"
+								disabled={readOnly}
+								data-testid="feature-image-caption"
+							/>
+						</div>
+					) : (
+						<button
+							type="button"
+							className="inspector-upload"
 							onClick={() => fileInputRef.current?.click()}
 							disabled={uploadingImage || readOnly}
 						>
 							{uploadingImage ? "Uploading…" : "Upload feature image"}
 						</button>
-					</div>
-				)}
-				{uploadError && <p className="error small">{uploadError}</p>}
-			</section>
+					)}
+					{uploadError && (
+						<p className="inspector-error" role="alert">
+							{uploadError}
+						</p>
+					)}
+				</Disclosure>
 
-			<section className="meta-section">
-				<label className="meta-label" htmlFor="post-slug-input">
-					Post URL slug
-				</label>
-				<input
-					id="post-slug-input"
-					value={meta.slug}
-					onChange={e =>
-						updateField("slug", e.target.value, {slug: e.target.value})
-					}
-					placeholder="post-slug"
-					spellCheck={false}
-					disabled={readOnly}
-					data-testid="slug-input"
-				/>
-				<p className="hint truncate" title={`${site.siteUrl}${meta.slug || ""}/`}>
-					{site.siteUrl}
-					{meta.slug || "…"}
-					/
-				</p>
-			</section>
-
-			<section className="meta-section">
-				<div className="meta-label-row">
-					<label className="meta-label" htmlFor="post-excerpt-input">
-						Excerpt
+				<Disclosure title="Post URL">
+					<label className="inspector-label" htmlFor="post-slug-input">
+						URL slug
 					</label>
-					<span
-						className={
-							meta.customExcerpt.length > MAX_EXCERPT_LENGTH
-								? "char-counter over"
-								: "char-counter"
-						}
-					>
-						{meta.customExcerpt.length}/{MAX_EXCERPT_LENGTH}
-					</span>
-				</div>
-				<textarea
-					id="post-excerpt-input"
-					rows={3}
-					maxLength={MAX_EXCERPT_LENGTH}
-					value={meta.customExcerpt}
-					onChange={e => {
-						const next = e.target.value.slice(0, MAX_EXCERPT_LENGTH);
-						updateField("customExcerpt", next, {
-							custom_excerpt: next || null,
-						});
-					}}
-					placeholder="Short summary for cards, emails and social previews…"
-					disabled={readOnly}
-					data-testid="excerpt-input"
-				/>
-			</section>
-
-			<section className="meta-section">
-				<label className="meta-label" htmlFor="post-visibility-select">
-					Post access
-				</label>
-				<select
-					id="post-visibility-select"
-					value={meta.visibility}
-					disabled={!canEditVisibility || readOnly}
-					onChange={e => handleVisibilityChange(e.target.value)}
-					data-testid="visibility-select"
-				>
-					<option value="public">Public</option>
-					<option value="members">Members only</option>
-					<option value="paid">Paid-members only</option>
-					<option value="tiers">Specific tiers</option>
-				</select>
-				{meta.visibility === "tiers" && (
-					<>
-						{meta.tiers.length > 0 && (
-							<div className="chip-list" data-testid="post-tiers">
-								{meta.tiers.map(tier => (
-									<span key={tier.id} className="chip">
-										{tier.name}
-										<button
-											type="button"
-											className="chip-remove"
-											onClick={() => handleRemoveTier(tier.id)}
-											disabled={!canEditVisibility || readOnly}
-											aria-label={`Remove tier ${tier.name}`}
-										>
-											×
-										</button>
-									</span>
-								))}
-							</div>
-						)}
-						<select
-							value=""
-							onChange={e => handleAddTier(e.target.value)}
-							disabled={
-								!canEditVisibility ||
-								readOnly ||
-								availableTiers.length === 0
-							}
-							aria-label="Add a tier"
-							data-testid="tier-select"
-						>
-							<option value="">Add a tier…</option>
-							{availableTiers.map(tier => (
-								<option key={tier.id} value={tier.id}>
-									{tier.name}
-								</option>
-							))}
-						</select>
-					</>
-				)}
-				{!canEditVisibility && (
-					<p className="hint">
-						Your role ({site.role}) cannot change post access.
-					</p>
-				)}
-			</section>
-
-			<section className="meta-section">
-				<label className="meta-label" htmlFor="post-tag-input">
-					Tags
-				</label>
-				{meta.tags.length > 0 && (
-					<div className="chip-list" data-testid="post-tags">
-						{meta.tags.map((tag, idx) => (
-							<span
-								key={`${tag.slug ?? tag.name}-${idx}`}
-								className={idx === 0 ? "chip primary" : "chip"}
-								title={idx === 0 ? "Primary tag" : undefined}
-							>
-								{tag.name}
-								<button
-									type="button"
-									className="chip-remove"
-									onClick={() => handleRemoveTag(idx)}
-									disabled={readOnly}
-									aria-label={`Remove tag ${tag.name}`}
-								>
-									×
-								</button>
-							</span>
-						))}
-					</div>
-				)}
-				<div className="inline-input-row">
 					<input
-						id="post-tag-input"
-						list="geist-site-tags"
-						value={tagInput}
-						onChange={e => setTagInput(e.target.value)}
-						onKeyDown={e => {
-							if (e.key === "Enter" || e.key === ",") {
-								e.preventDefault();
-								handleAddTag(tagInput);
-							}
-						}}
-						placeholder="Add a tag and press Enter…"
-						disabled={readOnly}
-						data-testid="tag-input"
-					/>
-					<button
-						type="button"
-						onClick={() => handleAddTag(tagInput)}
-						disabled={readOnly || !tagInput.trim()}
-					>
-						Add
-					</button>
-				</div>
-				<datalist id="geist-site-tags">
-					{siteTags.map(t => (
-						<option key={t.id ?? t.name} value={t.name} />
-					))}
-				</datalist>
-			</section>
-
-			<section className="meta-section">
-				<label className="meta-label">Authors</label>
-				<div className="chip-list" data-testid="post-authors">
-					{meta.authors.map(author => (
-						<span key={author.id} className="chip">
-							{author.name}
-							{canEditAuthors && meta.authors.length > 1 && (
-								<button
-									type="button"
-									className="chip-remove"
-									onClick={() => handleRemoveAuthor(author.id)}
-									disabled={readOnly}
-									aria-label={`Remove author ${author.name}`}
-								>
-									×
-								</button>
-							)}
-						</span>
-					))}
-				</div>
-				{canEditAuthors && availableAuthors.length > 0 && (
-					<div className="inline-input-row">
-						<select
-							value={authorSelect}
-							onChange={e => {
-								setAuthorSelect(e.target.value);
-								handleAddAuthor(e.target.value);
-							}}
-							aria-label="Add author"
-							disabled={readOnly}
-							data-testid="author-select"
-						>
-							<option value="">Add co-author…</option>
-							{availableAuthors.map(a => (
-								<option key={a.id} value={a.id}>
-									{a.name}
-								</option>
-							))}
-						</select>
-					</div>
-				)}
-				{!canEditAuthors && (
-					<p className="hint">
-						Your role ({site.role}) cannot reassign authors.
-					</p>
-				)}
-			</section>
-
-			<section className="meta-section">
-				<label className="checkbox-row">
-					<input
-						type="checkbox"
-						checked={meta.featured}
+						id="post-slug-input"
+						className="inspector-input"
+						value={meta.slug}
 						onChange={e =>
-							updateField("featured", e.target.checked, {
-								featured: e.target.checked,
-							})
+							updateField("slug", e.target.value, {slug: e.target.value})
 						}
+						placeholder="post-slug"
+						spellCheck={false}
 						disabled={readOnly}
-						data-testid="featured-checkbox"
+						data-testid="slug-input"
 					/>
-					<span>Feature this post</span>
-				</label>
-			</section>
+					<p
+						className="inspector-hint truncate"
+						title={`${site.siteUrl}${meta.slug || ""}/`}
+					>
+						{site.siteUrl}
+						{meta.slug || "…"}/
+					</p>
+				</Disclosure>
 
-			<section className="meta-section meta-footer-actions">
-				{onOpenRevisions && (
+				<Disclosure title="Post excerpt">
+					<div className="inspector-label-row">
+						<label className="inspector-label" htmlFor="post-excerpt-input">
+							Excerpt
+						</label>
+						<span
+							className={
+								meta.customExcerpt.length > MAX_EXCERPT_LENGTH
+									? "inspector-char-count is-over"
+									: "inspector-char-count"
+							}
+						>
+							{meta.customExcerpt.length}/{MAX_EXCERPT_LENGTH}
+						</span>
+					</div>
+					<textarea
+						id="post-excerpt-input"
+						className="inspector-textarea"
+						rows={3}
+						maxLength={MAX_EXCERPT_LENGTH}
+						value={meta.customExcerpt}
+						onChange={e => {
+							const next = e.target.value.slice(0, MAX_EXCERPT_LENGTH);
+							updateField("customExcerpt", next, {
+								custom_excerpt: next || null,
+							});
+						}}
+						placeholder="Short summary for cards, emails and social previews…"
+						disabled={readOnly}
+						data-testid="excerpt-input"
+					/>
+				</Disclosure>
+
+				<div className="inspector-footer">
+					{onOpenRevisions && (
+						<button
+							type="button"
+							className="inspector-secondary-button inspector-footer-button"
+							onClick={onOpenRevisions}
+							data-testid="open-revisions-button"
+						>
+							Post history ({revisionsCount ?? 0})
+						</button>
+					)}
 					<button
 						type="button"
-						onClick={onOpenRevisions}
-						data-testid="open-revisions-button"
+						className="inspector-secondary-button inspector-footer-button"
+						onClick={() => openPostInAdmin(postId, site)}
 					>
-						Post history ({revisionsCount ?? 0})
+						Open in Ghost Admin ↗
 					</button>
-				)}
-				<button
-					type="button"
-					onClick={() => openPostInAdmin(postId, site)}
-				>
-					Open in Ghost Admin ↗
-				</button>
-				<button
-					type="button"
-					className="danger-button"
-					onClick={handleDelete}
-					disabled={deleting || readOnly}
-					data-testid="delete-post-button"
-				>
-					{deleting ? "Deleting…" : "Delete post"}
-				</button>
-			</section>
+					<button
+						type="button"
+						className="inspector-danger-button inspector-footer-button"
+						onClick={handleDelete}
+						disabled={deleting || readOnly}
+						data-testid="delete-post-button"
+					>
+						{deleting ? "Deleting…" : "Delete post"}
+					</button>
+				</div>
+			</div>
 		</aside>
 	);
 }

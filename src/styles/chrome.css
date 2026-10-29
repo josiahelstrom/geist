@@ -1,0 +1,273 @@
+/*
+ * Window chrome — overlay titlebar, status pills, and Liquid Glass toolbar.
+ *
+ * Sources: docs/design-system.md §1.2, §4.1 (titlebar metrics), §4.5 (editor
+ * floating bars) and §5 (appearance matrix). Every color, radius, spacing and
+ * motion value comes from tokens.css; do not add ad-hoc hex values here.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Shell
+ *
+ * The titlebar is an overlay: the app shell starts at y = 0 and the body is
+ * the scroll container, so content can never slide up behind the toolbar.
+ * ------------------------------------------------------------------------- */
+
+.app-shell {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	min-height: 100vh;
+	padding-top: var(--titlebar-height);
+	overflow: hidden;
+}
+
+.app-shell-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: none;
+}
+
+/* Existing panes assumed a full viewport; account for the 52px overlay. */
+.app-shell-body > .editor-shell {
+	min-height: 100%;
+}
+
+.app-shell-body .meta-sidebar {
+	height: calc(100vh - var(--titlebar-height));
+}
+
+/* ---------------------------------------------------------------------------
+ * Overlay titlebar (§4.1)
+ *
+ * The whole 52px strip is draggable. The 78px traffic-light gutter stays empty
+ * and the glass toolbar opts out with `.titlebar-no-drag`.
+ * ------------------------------------------------------------------------- */
+
+.titlebar {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 50;
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	height: var(--titlebar-height);
+	padding: 0 var(--space-3) 0 var(--traffic-light-gutter);
+	background: transparent;
+	-webkit-app-region: drag;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.titlebar .traffic-light-gutter {
+	/* Already positioned/reserved in base.css; keep it inert. */
+	pointer-events: none;
+}
+
+.titlebar-identity {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.titlebar-title {
+	min-width: 0;
+	max-width: 46ch;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	line-height: 1;
+	color: var(--fg-primary);
+}
+
+.titlebar-title-brand {
+	font-weight: 600;
+	letter-spacing: -0.02em;
+}
+
+/* Status pill — text is never the only signal; the label sits next to it. */
+.titlebar-status {
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+	height: 20px;
+	padding: 0 var(--space-2);
+	border: 1px solid transparent;
+	border-radius: var(--radius-pill);
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1;
+	white-space: nowrap;
+	color: var(--fg-secondary);
+	background: var(--bg-row-hover);
+}
+
+.titlebar-status-draft {
+	color: var(--status-draft);
+}
+
+.titlebar-status-scheduled {
+	color: var(--status-scheduled);
+}
+
+.titlebar-status-published {
+	color: var(--status-publish);
+}
+
+.titlebar-status-sent {
+	color: var(--status-sent);
+}
+
+@supports (color: color-mix(in srgb, #000 10%, transparent)) {
+	.titlebar-status-draft {
+		background: color-mix(in srgb, var(--status-draft) 12%, transparent);
+		border-color: color-mix(in srgb, var(--status-draft) 22%, transparent);
+	}
+
+	.titlebar-status-scheduled {
+		background: color-mix(in srgb, var(--status-scheduled) 12%, transparent);
+		border-color: color-mix(in srgb, var(--status-scheduled) 22%, transparent);
+	}
+
+	.titlebar-status-published {
+		background: color-mix(in srgb, var(--status-publish) 12%, transparent);
+		border-color: color-mix(in srgb, var(--status-publish) 22%, transparent);
+	}
+
+	.titlebar-status-sent {
+		background: color-mix(in srgb, var(--status-sent) 12%, transparent);
+		border-color: color-mix(in srgb, var(--status-sent) 22%, transparent);
+	}
+}
+
+/* Save state — small dot plus copy, low contrast unless the save failed. */
+.titlebar-save {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	flex: none;
+	font-size: 12px;
+	line-height: 1;
+	color: var(--fg-secondary);
+}
+
+.titlebar-save::before {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: var(--radius-pill);
+	background: currentColor;
+	opacity: 0.55;
+}
+
+.titlebar-save-saving::before {
+	animation: titlebar-save-pulse 900ms var(--motion-ease) infinite;
+}
+
+.titlebar-save-dirty {
+	color: var(--status-draft);
+}
+
+.titlebar-save-conflict,
+.titlebar-save-error {
+	color: var(--status-danger);
+	font-weight: 600;
+}
+
+@keyframes titlebar-save-pulse {
+	0%,
+	100% {
+		opacity: 0.35;
+	}
+
+	50% {
+		opacity: 1;
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * Liquid Glass toolbar (§1.2, §5)
+ * ------------------------------------------------------------------------- */
+
+.glass-pill {
+	background: var(--bg-glass-pill);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+}
+
+.titlebar-actions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex: none;
+	height: var(--control-height);
+	padding: 0 var(--space-1);
+	margin-left: auto;
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-pill);
+	box-shadow: var(--shadow-card);
+	-webkit-app-region: no-drag;
+}
+
+.titlebar-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--control-height-compact);
+	height: var(--control-height-compact);
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-pill);
+	background: transparent;
+	color: var(--fg-secondary);
+	cursor: default;
+	-webkit-app-region: no-drag;
+	transition:
+		background-color var(--motion-duration) var(--motion-ease),
+		color var(--motion-duration) var(--motion-ease);
+}
+
+.titlebar-button:hover:not(:disabled) {
+	background: var(--bg-row-hover);
+	color: var(--fg-primary);
+}
+
+.titlebar-button:active,
+.titlebar-button[aria-pressed="true"] {
+	background: var(--bg-row-selected);
+	color: var(--fg-primary);
+	transform: none;
+}
+
+.titlebar-button:disabled {
+	color: var(--fg-muted);
+	background: transparent;
+}
+
+.titlebar-button svg {
+	width: 16px;
+	height: 16px;
+	display: block;
+}
+
+/* Narrow windows: keep the title and toolbar from colliding. */
+@media (max-width: 1119px) {
+	.titlebar-title {
+		max-width: 22ch;
+	}
+}
+
+@media (max-width: 1023px) {
+	.titlebar-save {
+		display: none;
+	}
+}

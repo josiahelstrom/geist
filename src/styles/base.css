@@ -1,0 +1,169 @@
+/*
+ * Geist base layer — the reset and platform defaults for the macOS webview.
+ *
+ * Loaded before App.css so legacy rules keep winning where they overlap
+ * (docs/design-system.md §4.7, §5).
+ */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	height: 100%;
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+	font-family: var(--font-sans);
+	background-color: var(--bg-canvas);
+}
+
+body {
+	margin: 0;
+	min-height: 100%;
+	font-family: var(--font-sans);
+	background-color: var(--bg-canvas);
+	color: var(--fg-primary);
+	overscroll-behavior: none;
+}
+
+#root {
+	min-height: 100%;
+}
+
+/* Webview text input: no UA chrome, no iOS-style rounding or zoom. */
+input,
+textarea,
+select,
+button {
+	font: inherit;
+}
+
+/* Broken media should not overflow the window. */
+img,
+video,
+canvas {
+	max-width: 100%;
+}
+
+/* Quiet macOS selection: surface step, not a brand blue. */
+::selection {
+	background: var(--bg-row-selected);
+	color: var(--fg-primary);
+}
+
+/*
+ * Focus ring (§5): 2px of the primary fill at 30% opacity, 1px offset.
+ * Never remove it without an equivalent replacement.
+ */
+:focus-visible {
+	outline: 2px solid var(--accent-primary-bg);
+	outline-offset: 1px;
+}
+
+@supports (color: color-mix(in srgb, #000 30%, transparent)) {
+	:focus-visible {
+		outline-color: color-mix(in srgb, var(--accent-primary-bg) 30%, transparent);
+	}
+}
+
+/* The editor caret communicates focus; it must not gain a ring (§4.5). */
+.koenig-lexical:focus-visible,
+[contenteditable="true"]:focus-visible {
+	outline: none;
+}
+
+/* Overlay scrollbars: trackless, hairline-free, only visible when scrolling. */
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background-color: var(--fg-muted);
+	background-clip: content-box;
+	border: 2px solid transparent;
+	border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background-color: var(--fg-secondary);
+}
+
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+/* ---------------------------------------------------------------------------
+ * Window chrome helpers (§4.1)
+ *
+ * The 52px strip is an app-wide drag region that sits under the overlay
+ * titlebar. It must stay empty; interactive controls opt out with
+ * `.titlebar-no-drag` (or use a button, which opts out by default).
+ * ------------------------------------------------------------------------- */
+
+.titlebar-drag-region {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: var(--titlebar-height);
+	z-index: 0;
+	-webkit-app-region: drag;
+	-webkit-user-select: none;
+	user-select: none;
+	background: transparent;
+}
+
+/* Reserve the 68×14 traffic lights. Nothing interactive may sit here. */
+.window-controls-gutter,
+.traffic-light-gutter {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: var(--traffic-light-gutter);
+	height: var(--titlebar-height);
+	-webkit-app-region: no-drag;
+	pointer-events: none;
+}
+
+.titlebar-no-drag,
+button,
+input,
+select,
+textarea,
+a[href] {
+	-webkit-app-region: no-drag;
+}
+
+/*
+ * Reduced motion (§5): instant state changes, no auto-fade, no transforms.
+ * Components must not rely on animation to convey state.
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}
+
+/* Reduced transparency (§5): glass surfaces go solid and lose their blur. */
+@media (prefers-reduced-transparency: reduce) {
+	.glass-pill,
+	.sidebar-card,
+	.sheet-backdrop {
+		backdrop-filter: none;
+	}
+}

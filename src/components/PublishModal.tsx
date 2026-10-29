@@ -1,4 +1,4 @@
-import {useMemo, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import type {EmailSegment, NewsletterSummary, Site} from "../lib/api";
 
 export type PublishDelivery = "web" | "web-and-email" | "email-only";
@@ -38,6 +38,9 @@ const SEGMENT_LABELS: Record<EmailSegment, string> = {
 	"status:free": "Free members only",
 	"status:-free": "Paid members only",
 };
+
+const FOCUSABLE_SELECTOR =
+	'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function pad(value: number): string {
 	return String(value).padStart(2, "0");
@@ -92,6 +95,55 @@ export default function PublishModal({
 		initialScheduleValue(scheduledAt),
 	);
 
+	const sheetRef = useRef<HTMLDivElement | null>(null);
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
+	const busyRef = useRef(busy);
+	busyRef.current = busy;
+
+	// Trap focus inside the sheet while it is open, close on Esc, and return
+	// focus to the Publish trigger when the sheet unmounts (§4.6).
+	useEffect(() => {
+		const previous = document.activeElement as HTMLElement | null;
+		const sheet = sheetRef.current;
+		sheet?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+
+		function handleKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape") {
+				event.preventDefault();
+				if (!busyRef.current) {
+					onCloseRef.current();
+				}
+				return;
+			}
+			if (event.key !== "Tab" || !sheet) {
+				return;
+			}
+			const focusable = Array.from(
+				sheet.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+			);
+			if (focusable.length === 0) {
+				return;
+			}
+			const first = focusable[0];
+			const last = focusable[focusable.length - 1];
+			const active = document.activeElement;
+			if (event.shiftKey && active === first) {
+				event.preventDefault();
+				last.focus();
+			} else if (!event.shiftKey && active === last) {
+				event.preventDefault();
+				first.focus();
+			}
+		}
+
+		document.addEventListener("keydown", handleKeyDown);
+		return () => {
+			document.removeEventListener("keydown", handleKeyDown);
+			previous?.focus?.();
+		};
+	}, []);
+
 	const canEmail = membersEnabled && newsletters.length > 0;
 	const needsConfirmation = delivery !== "web";
 
@@ -107,8 +159,7 @@ export default function PublishModal({
 		[newsletters, activeNewsletterSlug],
 	);
 
-	const recipientCount =
-		selectedNewsletter?.count?.active_members ?? 0;
+	const recipientCount = selectedNewsletter?.count?.active_members ?? 0;
 	const segmentLabel = SEGMENT_LABELS[emailSegment];
 
 	const scheduleMs = timing === "schedule" ? Date.parse(scheduleAt) : NaN;
@@ -176,7 +227,7 @@ export default function PublishModal({
 
 	return (
 		<div
-			className="modal-backdrop"
+			className="sheet-backdrop"
 			role="dialog"
 			aria-modal="true"
 			aria-label={`Publish ${postTitle || "untitled post"}`}
@@ -187,248 +238,300 @@ export default function PublishModal({
 				}
 			}}
 		>
-			<div className="modal-card">
-				<header className="modal-header">
-					<div>
-						<h2>Publish “{postTitle || "Untitled"}”</h2>
-						<p className="muted small">
+			<div className="publish-sheet" ref={sheetRef}>
+				<header className="sheet-header">
+					<div className="sheet-heading">
+						<h2 className="sheet-title">
+							Publish “{postTitle || "Untitled"}”
+						</h2>
+						<p className="sheet-subtitle">
 							{site.title} · {postStatus}
 						</p>
 					</div>
 					<button
 						type="button"
-						className="icon-button"
+						className="sheet-close"
 						onClick={onClose}
 						title="Close publish dialog"
+						aria-label="Close publish dialog"
 						data-testid="close-publish-modal"
 					>
 						✕
 					</button>
 				</header>
 
-				{postStatus === "scheduled" && scheduledAt && (
-					<p className="muted small" data-testid="current-schedule">
-						Currently scheduled for{" "}
-						{new Date(scheduledAt).toLocaleString()}. Choose “Schedule
-						for later” to change the time, or use the Unschedule button
-						in the editor header.
-					</p>
-				)}
-
-				<form onSubmit={handleSubmit}>
-					<fieldset className="publish-section">
-						<legend>Delivery</legend>
-
-						<label>
-							<input
-								type="radio"
-								name="publish-delivery"
-								value="web"
-								checked={delivery === "web"}
-								onChange={() => handleDeliveryChange("web")}
-								data-testid="delivery-web"
-							/>{" "}
-							Publish on web only — no email sent
-						</label>
-
-						<label>
-							<input
-								type="radio"
-								name="publish-delivery"
-								value="web-and-email"
-								checked={delivery === "web-and-email"}
-								disabled={!canEmail}
-								onChange={() =>
-									handleDeliveryChange("web-and-email")
-								}
-								data-testid="delivery-web-and-email"
-							/>{" "}
-							Publish on web and send email
-						</label>
-
-						<label>
-							<input
-								type="radio"
-								name="publish-delivery"
-								value="email-only"
-								checked={delivery === "email-only"}
-								disabled={!canEmail}
-								onChange={() =>
-									handleDeliveryChange("email-only")
-								}
-								data-testid="delivery-email-only"
-							/>{" "}
-							Send email only
-						</label>
-
-						{!canEmail && (
-							<p className="muted small">
-								Email delivery is unavailable: this site has no
-								active newsletters or members are disabled.
+				<form className="sheet-form" onSubmit={handleSubmit}>
+					<div className="sheet-body">
+						{postStatus === "scheduled" && scheduledAt && (
+							<p className="sheet-note" data-testid="current-schedule">
+								Currently scheduled for{" "}
+								{new Date(scheduledAt).toLocaleString()}. Choose
+								“Schedule for later” to change the time, or use the
+								Unschedule button in the editor header.
 							</p>
 						)}
-					</fieldset>
 
-					<fieldset className="publish-section">
-						<legend>Timing</legend>
+						<fieldset className="sheet-section">
+							<legend className="sheet-legend">Delivery</legend>
 
-						<label>
-							<input
-								type="radio"
-								name="publish-timing"
-								value="now"
-								checked={timing === "now"}
-								onChange={() => setTiming("now")}
-								data-testid="timing-now"
-							/>{" "}
-							Right now
-						</label>
-
-						<label>
-							<input
-								type="radio"
-								name="publish-timing"
-								value="schedule"
-								checked={timing === "schedule"}
-								onChange={() => setTiming("schedule")}
-								data-testid="timing-schedule"
-							/>{" "}
-							Schedule for later
-						</label>
-
-						{timing === "schedule" && (
-							<div className="schedule-field">
-								<label htmlFor="publish-schedule-at">
-									Publish date and time
+							<div
+								className="segmented"
+								role="radiogroup"
+								aria-label="Delivery"
+							>
+								<label className="segment">
+									<input
+										type="radio"
+										name="publish-delivery"
+										value="web"
+										checked={delivery === "web"}
+										onChange={() =>
+											handleDeliveryChange("web")
+										}
+										data-testid="delivery-web"
+									/>
+									<span className="segment-label">Web only</span>
 								</label>
-								<input
-									id="publish-schedule-at"
-									type="datetime-local"
-									value={scheduleAt}
-									onChange={e => setScheduleAt(e.target.value)}
-									data-testid="schedule-datetime-input"
-								/>
-								{!scheduleValid && (
-									<p className="error" role="alert">
-										Choose a time in the future.
-									</p>
-								)}
+
+								<label className="segment">
+									<input
+										type="radio"
+										name="publish-delivery"
+										value="web-and-email"
+										checked={delivery === "web-and-email"}
+										disabled={!canEmail}
+										onChange={() =>
+											handleDeliveryChange("web-and-email")
+										}
+										data-testid="delivery-web-and-email"
+									/>
+									<span className="segment-label">
+										Web + Email
+									</span>
+								</label>
+
+								<label className="segment">
+									<input
+										type="radio"
+										name="publish-delivery"
+										value="email-only"
+										checked={delivery === "email-only"}
+										disabled={!canEmail}
+										onChange={() =>
+											handleDeliveryChange("email-only")
+										}
+										data-testid="delivery-email-only"
+									/>
+									<span className="segment-label">
+										Email only
+									</span>
+								</label>
 							</div>
-						)}
-					</fieldset>
 
-					{needsConfirmation && (
-						<fieldset className="publish-section">
-							<legend>Newsletter</legend>
-
-							<label htmlFor="publish-newsletter-select">
-								Newsletter
-							</label>
-							<select
-								id="publish-newsletter-select"
-								data-testid="newsletter-select"
-								value={activeNewsletterSlug}
-								onChange={e => {
-									setNewsletterSlug(e.target.value);
-									setConfirmed(false);
-								}}
-							>
-								{newsletters.map(newsletter => (
-									<option
-										key={newsletter.id}
-										value={newsletter.slug}
-									>
-										{newsletter.name}
-									</option>
-								))}
-							</select>
-
-							<label htmlFor="publish-email-segment-select">
-								Recipients
-							</label>
-							<select
-								id="publish-email-segment-select"
-								data-testid="email-segment-select"
-								value={emailSegment}
-								onChange={e => {
-									setEmailSegment(
-										e.target.value as EmailSegment,
-									);
-									setConfirmed(false);
-								}}
-							>
-								<option value="all">All subscribers</option>
-								<option value="status:free">
-									Free members only
-								</option>
-								<option value="status:-free">
-									Paid members only
-								</option>
-							</select>
-
-							{selectedNewsletter ? (
-								<>
-									<div
-										className="warn-banner"
-										data-testid="newsletter-summary"
-									>
-										<div>
-											<strong>
-												{selectedNewsletter.name}
-											</strong>
-											<div data-testid="recipient-count">
-												Up to{" "}
-												{recipientCount.toLocaleString()}{" "}
-												active subscribers
-											</div>
-											<div data-testid="recipient-segment">
-												{segmentLabel}
-											</div>
-										</div>
-										<span>
-											This email cannot be unsent.
-										</span>
-									</div>
-
-									<label className="confirm-send">
-										<input
-											type="checkbox"
-											checked={confirmed}
-											onChange={e =>
-												setConfirmed(e.target.checked)
-											}
-											data-testid="confirm-newsletter-send"
-										/>{" "}
-										<span>
-											I confirm sending this email to
-											subscribers of{" "}
-											{selectedNewsletter.name} (
-											{recipientCount.toLocaleString()}{" "}
-											active members).
-										</span>
-									</label>
-								</>
-							) : (
-								<p className="muted small">
-									No newsletter is available for this site.
+							{!canEmail && (
+								<p className="sheet-hint">
+									Email delivery is unavailable: this site has
+									no active newsletters or members are disabled.
 								</p>
 							)}
 						</fieldset>
-					)}
 
-					<div className="modal-actions">
-						<button type="button" onClick={onClose} disabled={busy}>
+						<fieldset className="sheet-section">
+							<legend className="sheet-legend">Timing</legend>
+
+							<div
+								className="segmented"
+								role="radiogroup"
+								aria-label="Timing"
+							>
+								<label className="segment">
+									<input
+										type="radio"
+										name="publish-timing"
+										value="now"
+										checked={timing === "now"}
+										onChange={() => setTiming("now")}
+										data-testid="timing-now"
+									/>
+									<span className="segment-label">Now</span>
+								</label>
+
+								<label className="segment">
+									<input
+										type="radio"
+										name="publish-timing"
+										value="schedule"
+										checked={timing === "schedule"}
+										onChange={() => setTiming("schedule")}
+										data-testid="timing-schedule"
+									/>
+									<span className="segment-label">
+										Schedule
+									</span>
+								</label>
+							</div>
+
+							{timing === "schedule" && (
+								<div className="sheet-field schedule-field">
+									<label
+										className="sheet-label"
+										htmlFor="publish-schedule-at"
+									>
+										Publish date and time
+									</label>
+									<input
+										id="publish-schedule-at"
+										className="sheet-input"
+										type="datetime-local"
+										value={scheduleAt}
+										onChange={e =>
+											setScheduleAt(e.target.value)
+										}
+										data-testid="schedule-datetime-input"
+									/>
+									{!scheduleValid && (
+										<p className="sheet-error" role="alert">
+											Choose a time in the future.
+										</p>
+									)}
+								</div>
+							)}
+						</fieldset>
+
+						{needsConfirmation && (
+							<fieldset className="sheet-section">
+								<legend className="sheet-legend">Newsletter</legend>
+
+								<div className="sheet-field">
+									<label
+										className="sheet-label"
+										htmlFor="publish-newsletter-select"
+									>
+										Newsletter
+									</label>
+									<select
+										id="publish-newsletter-select"
+										className="sheet-select"
+										data-testid="newsletter-select"
+										value={activeNewsletterSlug}
+										onChange={e => {
+											setNewsletterSlug(e.target.value);
+											setConfirmed(false);
+										}}
+									>
+										{newsletters.map(newsletter => (
+											<option
+												key={newsletter.id}
+												value={newsletter.slug}
+											>
+												{newsletter.name}
+											</option>
+										))}
+									</select>
+								</div>
+
+								<div className="sheet-field">
+									<label
+										className="sheet-label"
+										htmlFor="publish-email-segment-select"
+									>
+										Recipients
+									</label>
+									<select
+										id="publish-email-segment-select"
+										className="sheet-select"
+										data-testid="email-segment-select"
+										value={emailSegment}
+										onChange={e => {
+											setEmailSegment(
+												e.target.value as EmailSegment,
+											);
+											setConfirmed(false);
+										}}
+									>
+										<option value="all">All subscribers</option>
+										<option value="status:free">
+											Free members only
+										</option>
+										<option value="status:-free">
+											Paid members only
+										</option>
+									</select>
+								</div>
+
+								{selectedNewsletter ? (
+									<>
+										<div
+											className="warn-banner sheet-warn"
+											data-testid="newsletter-summary"
+										>
+											<div className="sheet-warn-copy">
+												<strong>
+													{selectedNewsletter.name}
+												</strong>
+												<div data-testid="recipient-count">
+													Sending to{" "}
+													{recipientCount.toLocaleString()}{" "}
+													active subscribers
+												</div>
+												<div data-testid="recipient-segment">
+													{segmentLabel}
+												</div>
+											</div>
+											<span className="sheet-warn-note">
+												This email cannot be unsent.
+											</span>
+										</div>
+
+										<label className="confirm-send sheet-confirm">
+											<input
+												type="checkbox"
+												checked={confirmed}
+												onChange={e =>
+													setConfirmed(e.target.checked)
+												}
+												data-testid="confirm-newsletter-send"
+											/>
+											<span>
+												I confirm sending this email to
+												subscribers of{" "}
+												{selectedNewsletter.name} (
+												{recipientCount.toLocaleString()}{" "}
+												active members).
+											</span>
+										</label>
+									</>
+								) : (
+									<p className="sheet-hint">
+										No newsletter is available for this site.
+									</p>
+								)}
+							</fieldset>
+						)}
+					</div>
+
+					<footer className="sheet-actions">
+						<button
+							type="button"
+							className="sheet-action is-secondary"
+							onClick={onClose}
+							disabled={busy}
+						>
 							Cancel
 						</button>
 						<button
 							type="submit"
-							className="primary-button"
+							className={
+								needsConfirmation
+									? "sheet-action is-primary is-email"
+									: "sheet-action is-primary"
+							}
 							disabled={submitDisabled}
 							data-testid="publish-submit"
 						>
 							{busy ? "Working…" : submitLabel}
 						</button>
-					</div>
+					</footer>
 				</form>
 			</div>
 		</div>

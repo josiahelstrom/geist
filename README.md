@@ -31,7 +31,7 @@ Override the signing identity with `GEIST_SIGN_IDENTITY` if yours differs.
 ## Checks
 
 ```bash
-npm run check        # tsc --noEmit + 114 unit tests
+npm run check        # tsc --noEmit + 147 unit tests
 npm run test:rust    # keyring round-trip, HTTP scope, preview URL guard, JWT minting
 ```
 
@@ -52,7 +52,7 @@ npm run tauri build
 
 The `.app` and `.dmg` land in:
 - `src-tauri/target/release/bundle/macos/Geist.app`
-- `src-tauri/target/release/bundle/dmg/Geist_0.4.0_aarch64.dmg`
+- `src-tauri/target/release/bundle/dmg/Geist_0.5.0_aarch64.dmg`
 
 ## How it works
 
@@ -89,7 +89,15 @@ Deliberate safety rules, each covered by a test:
   contains an unknown Lexical node, an error boundary catches it and offers
   "Open in Ghost Admin ↗" instead of blanking the editor.
 
-v0.4.0 completes the publishing flow: web-only publishing by default, scheduled
+v0.5.0 "Native" rebuilds the shell around macOS: a vibrancy-backed window with an
+overlay title bar (hidden title, inset traffic lights), a native menu bar
+(Geist/File/Edit/View/Window) whose commands are routed into the UI, and a three-pane
+layout of navigation rail, post list and inspector — each pane collapsible from the title
+bar or with `Cmd+\`, `Cmd+Alt+I`, `Cmd+N` and `Cmd+S`. The editor canvas is borderless and
+the Koenig typography, chrome and inspector are themed entirely by CSS tokens, with
+system/light/dark appearance cycling from the title bar or `Cmd+Shift+L`.
+
+v0.4.0 completed the publishing flow: web-only publishing by default, scheduled
 publishing and unscheduling, post access with paid tiers, newsletter sending behind an
 explicit confirmation that shows the recipient count, and a Post History revisions
 drawer with restore. v0.3.0 had already closed the editor gap: full `cardConfig` parity

@@ -2,7 +2,9 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD as B64};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::Emitter;
 use tauri::Manager;
+use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 
 const SERVICE: &str = "app.geist";
 const LEGACY_SERVICE: &str = "app.draftdesk";
@@ -96,6 +98,78 @@ pub fn validate_preview_url(raw: &str) -> Result<tauri::Url, String> {
     }
 }
 
+/// Builds the native macOS menu bar. Custom items emit their ids to the
+/// webview through the `geist:menu` event (see `run`).
+fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<tauri::menu::Menu<R>> {
+    let geist = SubmenuBuilder::new(app, "Geist")
+        .item(&PredefinedMenuItem::about(app, None, None)?)
+        .separator()
+        .item(&PredefinedMenuItem::services(app, None)?)
+        .separator()
+        .item(&PredefinedMenuItem::hide(app, None)?)
+        .item(&PredefinedMenuItem::hide_others(app, None)?)
+        .item(&PredefinedMenuItem::show_all(app, None)?)
+        .separator()
+        .item(&PredefinedMenuItem::quit(app, None)?)
+        .build()?;
+
+    let file = SubmenuBuilder::new(app, "File")
+        .item(
+            &MenuItemBuilder::with_id("menu-new-post", "New Post")
+                .accelerator("CmdOrCtrl+N")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("menu-save-revision", "Save Revision")
+                .accelerator("CmdOrCtrl+S")
+                .build(app)?,
+        )
+        .separator()
+        .item(&PredefinedMenuItem::close_window(app, None)?)
+        .build()?;
+
+    let edit = SubmenuBuilder::new(app, "Edit")
+        .item(&PredefinedMenuItem::undo(app, None)?)
+        .item(&PredefinedMenuItem::redo(app, None)?)
+        .separator()
+        .item(&PredefinedMenuItem::cut(app, None)?)
+        .item(&PredefinedMenuItem::copy(app, None)?)
+        .item(&PredefinedMenuItem::paste(app, None)?)
+        .item(&PredefinedMenuItem::select_all(app, None)?)
+        .build()?;
+
+    let view = SubmenuBuilder::new(app, "View")
+        .item(
+            &MenuItemBuilder::with_id("menu-toggle-sidebar", "Toggle Sidebar")
+                .accelerator("CmdOrCtrl+\\")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("menu-toggle-inspector", "Toggle Inspector")
+                .accelerator("CmdOrCtrl+Alt+I")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("menu-cycle-theme", "Cycle Appearance")
+                .accelerator("CmdOrCtrl+Shift+L")
+                .build(app)?,
+        )
+        .separator()
+        .item(&PredefinedMenuItem::fullscreen(app, None)?)
+        .build()?;
+
+    let window = SubmenuBuilder::new(app, "Window")
+        .item(&PredefinedMenuItem::minimize(app, None)?)
+        .item(&PredefinedMenuItem::maximize(app, None)?)
+        .separator()
+        .item(&PredefinedMenuItem::close_window(app, None)?)
+        .build()?;
+
+    MenuBuilder::new(app)
+        .items(&[&geist, &file, &edit, &view, &window])
+        .build()
+}
+
 /// Opens or updates an isolated preview window loading the remote Ghost preview URL.
 ///
 /// Safety rule 4.6: the preview window has label `"preview"`, which is NOT listed
@@ -129,6 +203,8 @@ fn open_preview_window(
     .title(&window_title)
     .inner_size(1040.0, 780.0)
     .min_inner_size(480.0, 360.0)
+    // External preview pages keep the standard titlebar / window chrome.
+    .title_bar_style(tauri::TitleBarStyle::Visible)
     .build()
     .map_err(|e| e.to_string())?;
 
@@ -165,6 +241,10 @@ pub fn mint(key: &str, offset: i64) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .menu(|app| build_menu(app))
+        .on_menu_event(|app, event| {
+            let _ = app.emit("geist:menu", event.id().0.as_str());
+        })
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())

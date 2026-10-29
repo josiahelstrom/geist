@@ -1,0 +1,502 @@
+/*
+ * Publish sheet — docs/design-system.md §4.6 (macOS sheet, segmented delivery,
+ * mandatory newsletter recipient-count gate) and §5 (appearance matrix).
+ *
+ * App.css is loaded after this file, so sheet rules that have to beat legacy
+ * element selectors are scoped under `.publish-sheet` / `.sheet-backdrop`.
+ */
+
+:root {
+	--shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.24);
+}
+
+/* ---------------------------------------------------------------------------
+ * Backdrop & sheet shell
+ * ------------------------------------------------------------------------- */
+
+.sheet-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-6);
+	background: var(--scrim-sheet);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+	animation: sheet-backdrop-in var(--motion-duration) var(--motion-ease);
+}
+
+.publish-sheet {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 480px;
+	max-height: min(86vh, 760px);
+	box-sizing: border-box;
+	overflow: hidden;
+	background: var(--bg-elevated);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-modal);
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	color: var(--fg-primary);
+	animation: sheet-rise var(--motion-duration) var(--motion-ease);
+}
+
+@keyframes sheet-backdrop-in {
+	from {
+		opacity: 0;
+	}
+
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes sheet-rise {
+	from {
+		opacity: 0;
+		transform: translateY(8px) scale(0.985);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * Header
+ * ------------------------------------------------------------------------- */
+
+.publish-sheet .sheet-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-3);
+	flex: 0 0 auto;
+	padding: var(--space-4) var(--space-5) var(--space-3);
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.publish-sheet .sheet-heading {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.publish-sheet .sheet-title {
+	margin: 0;
+	font-size: 17px;
+	font-weight: 600;
+	line-height: 1.25;
+	letter-spacing: -0.015em;
+	color: var(--fg-primary);
+	overflow-wrap: anywhere;
+}
+
+.publish-sheet .sheet-subtitle {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--fg-secondary);
+}
+
+.publish-sheet .sheet-close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--fg-secondary);
+	font-size: 13px;
+	cursor: pointer;
+	transition: background-color var(--motion-duration) var(--motion-ease);
+}
+
+.publish-sheet .sheet-close:hover:not(:disabled) {
+	background: var(--bg-row-selected);
+	color: var(--fg-primary);
+}
+
+.publish-sheet .sheet-close:focus-visible {
+	outline: 2px solid
+		color-mix(in srgb, var(--accent-primary-bg) 30%, transparent);
+	outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Body & sections
+ * ------------------------------------------------------------------------- */
+
+.publish-sheet .sheet-form {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.publish-sheet .sheet-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	padding: var(--space-4) var(--space-5);
+	overscroll-behavior: contain;
+}
+
+.publish-sheet .sheet-note {
+	margin: 0;
+	padding: var(--space-2) var(--space-3);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-md);
+	background: var(--bg-row-hover);
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--fg-secondary);
+}
+
+.publish-sheet .sheet-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.publish-sheet .sheet-legend {
+	padding: 0;
+	margin-bottom: 2px;
+	font-size: 11px;
+	font-weight: 500;
+	line-height: 1.3;
+	color: var(--fg-secondary);
+}
+
+.publish-sheet .sheet-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.publish-sheet .sheet-label {
+	font-size: 11px;
+	font-weight: 500;
+	line-height: 1.3;
+	color: var(--fg-secondary);
+}
+
+.publish-sheet .sheet-hint {
+	margin: 0;
+	font-size: 11px;
+	line-height: 1.45;
+	color: var(--fg-muted);
+}
+
+.publish-sheet .sheet-error {
+	margin: 0;
+	font-size: 11px;
+	line-height: 1.4;
+	color: var(--status-danger);
+}
+
+/* ---------------------------------------------------------------------------
+ * Segmented controls
+ * ------------------------------------------------------------------------- */
+
+.publish-sheet .segmented {
+	display: flex;
+	gap: 2px;
+	padding: 2px;
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-md);
+	background: var(--bg-row-hover);
+}
+
+.publish-sheet .segment {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 1 1 0;
+	min-width: 0;
+	height: 26px;
+	padding: 0 var(--space-2);
+	border-radius: var(--radius-sm);
+	color: var(--fg-secondary);
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 1;
+	cursor: pointer;
+	user-select: none;
+	-webkit-user-select: none;
+	transition: background-color var(--motion-duration) var(--motion-ease),
+		color var(--motion-duration) var(--motion-ease);
+}
+
+.publish-sheet .segment input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.publish-sheet .segment:has(input:checked) {
+	background: var(--bg-elevated);
+	color: var(--fg-primary);
+	box-shadow: var(--shadow-card);
+}
+
+.publish-sheet .segment:has(input:focus-visible) {
+	outline: 2px solid
+		color-mix(in srgb, var(--accent-primary-bg) 30%, transparent);
+	outline-offset: 1px;
+}
+
+.publish-sheet .segment:has(input:disabled) {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.publish-sheet .segment:has(input:disabled) input {
+	cursor: default;
+}
+
+.publish-sheet .segment-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * Inputs
+ * ------------------------------------------------------------------------- */
+
+.publish-sheet .sheet-input,
+.publish-sheet .sheet-select {
+	width: 100%;
+	box-sizing: border-box;
+	background: var(--bg-canvas);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-md);
+	color: var(--fg-primary);
+	font-size: 13px;
+	line-height: 1.4;
+	transition: border-color var(--motion-duration) var(--motion-ease);
+}
+
+.publish-sheet .sheet-input,
+.publish-sheet .sheet-select {
+	height: var(--control-height-compact);
+	padding: 0 var(--space-2);
+}
+
+.publish-sheet .sheet-select {
+	padding-right: var(--space-1);
+}
+
+.publish-sheet .sheet-input:focus,
+.publish-sheet .sheet-select:focus {
+	outline: none;
+	border-color: var(--fg-muted);
+}
+
+.publish-sheet .sheet-input:focus-visible,
+.publish-sheet .sheet-select:focus-visible {
+	outline: 2px solid
+		color-mix(in srgb, var(--accent-primary-bg) 30%, transparent);
+	outline-offset: 1px;
+}
+
+.publish-sheet .sheet-input:disabled,
+.publish-sheet .sheet-select:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+/* ---------------------------------------------------------------------------
+ * Newsletter gate (recipient count + explicit confirmation)
+ * ------------------------------------------------------------------------- */
+
+.publish-sheet .warn-banner.sheet-warn {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-3);
+	margin: 0;
+	padding: var(--space-2) var(--space-3);
+	border: 1px solid
+		color-mix(in srgb, var(--status-danger) 22%, transparent);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--status-danger) 8%, var(--bg-elevated));
+	color: var(--fg-primary);
+	font-size: 12px;
+	line-height: 1.45;
+}
+
+.publish-sheet .sheet-warn-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+.publish-sheet .sheet-warn-copy strong {
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.publish-sheet .sheet-warn-note {
+	flex: 0 0 auto;
+	color: var(--status-danger);
+	font-size: 11px;
+	font-weight: 500;
+	line-height: 1.45;
+	text-align: right;
+}
+
+.publish-sheet .confirm-send.sheet-confirm {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-2);
+	margin: 0;
+	padding: var(--space-2) var(--space-3);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-md);
+	background: var(--bg-canvas);
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--fg-secondary);
+	cursor: pointer;
+}
+
+.publish-sheet .sheet-confirm input[type="checkbox"] {
+	flex: 0 0 auto;
+	width: 14px;
+	height: 14px;
+	margin: 2px 0 0;
+	padding: 0;
+	accent-color: var(--accent-primary-bg);
+	cursor: pointer;
+}
+
+.publish-sheet .sheet-confirm:focus-within {
+	outline: 2px solid
+		color-mix(in srgb, var(--accent-primary-bg) 30%, transparent);
+	outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Actions
+ * ------------------------------------------------------------------------- */
+
+.publish-sheet .sheet-actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: var(--space-2);
+	flex: 0 0 auto;
+	padding: var(--space-3) var(--space-5);
+	border-top: 1px solid var(--border-subtle);
+	background: var(--bg-elevated);
+}
+
+.publish-sheet .sheet-action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	height: var(--control-height);
+	padding: 0 var(--space-4);
+	border: 1px solid transparent;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: var(--fg-primary);
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 1;
+	cursor: pointer;
+	transition: background-color var(--motion-duration) var(--motion-ease),
+		opacity var(--motion-duration) var(--motion-ease),
+		transform 50ms ease;
+}
+
+.publish-sheet .sheet-action:active:not(:disabled) {
+	transform: scale(0.985);
+}
+
+.publish-sheet .sheet-action:focus-visible {
+	outline: 2px solid
+		color-mix(in srgb, var(--accent-primary-bg) 30%, transparent);
+	outline-offset: 1px;
+}
+
+.publish-sheet .sheet-action.is-secondary {
+	color: var(--fg-secondary);
+}
+
+.publish-sheet .sheet-action.is-secondary:hover:not(:disabled) {
+	background: var(--bg-row-hover);
+	color: var(--fg-primary);
+}
+
+.publish-sheet .sheet-action.is-primary {
+	background: var(--accent-primary-bg);
+	border-color: var(--accent-primary-bg);
+	color: var(--accent-primary-fg);
+	font-weight: 500;
+}
+
+.publish-sheet .sheet-action.is-primary:hover:not(:disabled) {
+	opacity: 0.9;
+}
+
+.publish-sheet .sheet-action.is-primary.is-email {
+	background: var(--status-publish);
+	border-color: var(--status-publish);
+}
+
+.publish-sheet .sheet-action:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* ---------------------------------------------------------------------------
+ * Appearance matrix (§5)
+ * ------------------------------------------------------------------------- */
+
+@media (prefers-reduced-transparency: reduce) {
+	.sheet-backdrop,
+	.publish-sheet {
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+	}
+
+	.publish-sheet {
+		background: var(--bg-elevated);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sheet-backdrop,
+	.publish-sheet {
+		animation: none;
+	}
+}

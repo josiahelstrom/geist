@@ -1,0 +1,439 @@
+/*
+ * Koenig Lexical retheme — docs/design-system.md §3.3, §4.5, and the Ghost
+ * 6.68 / Ulysses reference captures.
+ *
+ * Koenig ships a complete editor stylesheet with its own type ramp and card
+ * chrome. These rules re-point that surface at the Geist tokens: serif prose,
+ * sans headings, a single green link accent, magenta blockquote rule, and
+ * quiet, rounded card chrome.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Root
+ * ------------------------------------------------------------------------- */
+
+.koenig-lexical {
+	--kg-accent-color: var(--status-publish);
+	background: transparent;
+	color: var(--fg-primary);
+	font-family: var(--font-serif);
+	font-size: 20px;
+	line-height: 1.6;
+	letter-spacing: 0.1px;
+}
+
+.koenig-lexical .kg-prose {
+	color: var(--fg-primary);
+}
+
+/* ---------------------------------------------------------------------------
+ * Body prose
+ * ------------------------------------------------------------------------- */
+
+.koenig-lexical .kg-prose p,
+.koenig-lexical .kg-prose aside,
+.koenig-lexical .kg-prose ul,
+.koenig-lexical .kg-prose ol {
+	margin-top: 1.6rem;
+	font-family: var(--font-serif);
+	font-size: 20px; /* 1.25rem @ 16px */
+	font-weight: 400;
+	line-height: 1.6;
+	letter-spacing: 0.1px;
+	color: var(--fg-primary);
+}
+
+.koenig-lexical .kg-prose li {
+	font-family: var(--font-serif);
+	font-size: 20px; /* 1.25rem @ 16px */
+	font-weight: 400;
+	line-height: 1.6;
+	letter-spacing: 0.1px;
+	color: var(--fg-primary);
+}
+
+.koenig-lexical .kg-prose p:first-child,
+.koenig-lexical .kg-prose ul:first-child,
+.koenig-lexical .kg-prose ol:first-child {
+	margin-top: 0;
+}
+
+.koenig-lexical .kg-prose strong,
+.koenig-lexical .kg-prose b {
+	font-weight: 700;
+}
+
+.koenig-lexical .kg-prose em,
+.koenig-lexical .kg-prose i {
+	font-style: italic;
+}
+
+.koenig-lexical .kg-prose code {
+	padding: 0.1em 0.3em;
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-sm);
+	background: var(--bg-row-hover);
+	color: var(--fg-primary);
+	font-family: var(--font-mono);
+	font-size: 0.85em;
+}
+
+/* ---------------------------------------------------------------------------
+ * Headings — sans stack and the Ghost 6.68 editor scale
+ * ------------------------------------------------------------------------- */
+
+.koenig-lexical .kg-prose h1,
+.koenig-lexical .kg-prose h2,
+.koenig-lexical .kg-prose h3,
+.koenig-lexical .kg-prose h4,
+.koenig-lexical .kg-prose h5,
+.koenig-lexical .kg-prose h6,
+.koenig-lexical .koenig-lexical-heading .kg-prose p,
+.koenig-lexical .koenig-lexical-subheading .kg-prose p {
+	font-family: var(--font-sans);
+	color: var(--fg-primary);
+	font-weight: 700;
+}
+
+.koenig-lexical .kg-prose h1 {
+	font-size: 44px;
+	line-height: 1.15;
+	letter-spacing: -0.015em;
+}
+
+.koenig-lexical .kg-prose h2 {
+	font-size: 32px;
+	line-height: 1.2;
+	letter-spacing: -0.014em;
+}
+
+.koenig-lexical .kg-prose h3 {
+	font-size: 25px;
+	line-height: 1.3;
+	letter-spacing: -0.013em;
+}
+
+.koenig-lexical .kg-prose h4 {
+	font-size: 20px;
+	line-height: 1.3;
+	letter-spacing: -0.012em;
+}
+
+.koenig-lexical .kg-prose h5,
+.koenig-lexical .kg-prose h6 {
+	font-size: 17px;
+	line-height: 1.4;
+	letter-spacing: -0.01em;
+}
+
+/* ---------------------------------------------------------------------------
+ * Blockquotes & links
+ * ------------------------------------------------------------------------- */
+
+.koenig-lexical .kg-prose blockquote,
+.koenig-lexical .kg-prose .kg-blockquote-alt {
+	margin: 1.6rem 0;
+	padding: 0 0 0 1.25rem;
+	border-left: 3px solid var(--status-draft, #fb2d8d);
+	border-radius: 0;
+	background: transparent;
+	color: var(--fg-primary);
+	font-family: var(--font-serif);
+	font-style: italic;
+}
+
+.koenig-lexical .kg-prose blockquote p,
+.koenig-lexical .kg-prose .kg-blockquote-alt p {
+	margin: 0;
+	font-style: italic;
+}
+
+.koenig-lexical .kg-prose a,
+.koenig-lexical .kg-prose a span {
+	color: var(--status-publish) !important;
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
+}
+
+.koenig-lexical .kg-prose a:hover {
+	opacity: 0.82;
+}
+
+/* ---------------------------------------------------------------------------
+ * Card chrome — images, embeds, GIFs, bookmarks, files, galleries, audio
+ * ------------------------------------------------------------------------- */
+
+.koenig-lexical .kg-card,
+.koenig-lexical .kg-image-card,
+.koenig-lexical .kg-gallery-card,
+.koenig-lexical .kg-embed-card,
+.koenig-lexical .kg-bookmark-card,
+.koenig-lexical .kg-bookmark-container,
+.koenig-lexical .kg-file-card,
+.koenig-lexical .kg-file-card-container,
+.koenig-lexical .kg-audio-card,
+.koenig-lexical .kg-code-card,
+.koenig-lexical .kg-callout-card,
+.koenig-lexical .kg-cta-card,
+.koenig-lexical [data-kg-card-width] {
+	overflow: hidden;
+	border: 1px solid var(--border-default);
+	border-radius: 8px;
+	background: var(--bg-elevated);
+	color: var(--fg-primary);
+}
+
+.koenig-lexical .kg-image-card img,
+.koenig-lexical .kg-gallery-card img,
+.koenig-lexical .kg-gallery-image img,
+.koenig-lexical .kg-prose figure img,
+.koenig-lexical .kg-embed-card iframe {
+	display: block;
+	max-width: 100%;
+	border-radius: 8px;
+}
+
+.koenig-lexical .kg-card figcaption,
+.koenig-lexical .kg-image-card figcaption,
+.koenig-lexical .kg-gallery-card figcaption,
+.koenig-lexical .kg-embed-card figcaption,
+.koenig-lexical .kg-bookmark-card figcaption,
+.koenig-lexical .kg-card-caption,
+.koenig-lexical .koenig-lexical-caption p,
+.koenig-lexical-caption p {
+	margin: 0.6rem 0 0;
+	color: var(--fg-secondary);
+	font-family: var(--font-sans);
+	font-size: 14px;
+	font-weight: 400;
+	line-height: 1.4;
+	letter-spacing: 0;
+}
+
+/* Caption editors reuse `.kg-prose`; keep them UI-sized and sans. */
+.koenig-lexical.koenig-lexical-caption .kg-prose p,
+.koenig-lexical.koenig-lexical-caption .kg-prose blockquote,
+.koenig-lexical.koenig-lexical-caption .kg-prose ul,
+.koenig-lexical.koenig-lexical-caption .kg-prose ol,
+.koenig-lexical .koenig-lexical-caption .kg-prose p {
+	margin-top: 0;
+	color: var(--fg-secondary);
+	font-family: var(--font-sans);
+	font-size: 14px;
+	font-weight: 400;
+	line-height: 1.4;
+	letter-spacing: 0;
+}
+
+/* Bookmark card ---------------------------------------------------------------- */
+
+.koenig-lexical .kg-bookmark-container {
+	display: flex;
+	overflow: hidden;
+	border: 1px solid var(--border-default);
+	border-radius: 8px;
+	background: var(--bg-elevated);
+	text-decoration: none;
+}
+
+.koenig-lexical .kg-bookmark-content {
+	padding: 16px;
+	font-family: var(--font-sans);
+}
+
+.koenig-lexical .kg-bookmark-title {
+	color: var(--fg-primary);
+	font-family: var(--font-sans);
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.35;
+	letter-spacing: -0.01em;
+}
+
+.koenig-lexical .kg-bookmark-description {
+	margin-top: 6px;
+	color: var(--fg-secondary);
+	font-family: var(--font-sans);
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.koenig-lexical .kg-bookmark-metadata {
+	margin-top: 10px;
+	color: var(--fg-secondary);
+	font-family: var(--font-sans);
+	font-size: 12px;
+}
+
+.koenig-lexical .kg-bookmark-thumbnail,
+.koenig-lexical .kg-bookmark-thumbnail img {
+	border-radius: 0 8px 8px 0;
+}
+
+/* Code, file, audio and embed cards ------------------------------------------- */
+
+.koenig-lexical .kg-code-card pre,
+.koenig-lexical .kg-code-card code {
+	font-family: var(--font-mono);
+	font-size: 14px;
+	line-height: 1.5;
+	letter-spacing: 0;
+}
+
+.koenig-lexical .kg-code-card pre {
+	margin: 0;
+	padding: 16px;
+	overflow-x: auto;
+	border: 0;
+	border-radius: 8px;
+	background: var(--bg-elevated);
+	color: var(--fg-primary);
+}
+
+.koenig-lexical .kg-file-card-container,
+.koenig-lexical .kg-audio-card {
+	border: 1px solid var(--border-default);
+	border-radius: 8px;
+	background: var(--bg-elevated);
+	font-family: var(--font-sans);
+}
+
+.koenig-lexical .kg-file-card-title,
+.koenig-lexical .kg-audio-title {
+	color: var(--fg-primary);
+	font-family: var(--font-sans);
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.koenig-lexical .kg-file-card-caption,
+.koenig-lexical .kg-file-card-filename,
+.koenig-lexical .kg-file-card-filesize,
+.koenig-lexical .kg-audio-duration {
+	color: var(--fg-secondary);
+	font-family: var(--font-sans);
+	font-size: 12px;
+}
+
+.koenig-lexical .kg-embed-card iframe {
+	border: 0;
+	border-radius: 8px;
+}
+
+/* Callouts and CTAs keep their content sans, even though prose is serif. */
+.koenig-lexical .kg-callout-card,
+.koenig-lexical .kg-callout-text,
+.koenig-lexical .kg-cta-card,
+.koenig-lexical .kg-cta-text,
+.koenig-lexical .kg-cta-button {
+	font-family: var(--font-sans);
+}
+
+/* Placeholder is UI chrome, not prose. */
+.koenig-lexical .kg-prose .placeholder,
+.koenig-lexical .kg-prose [data-placeholder]::after {
+	color: var(--fg-tertiary);
+	font-family: var(--font-serif);
+	opacity: 1;
+}
+
+/* ---------------------------------------------------------------------------
+ * Dark mode — both Koenig's own `.dark` root and a dark app shell
+ * ------------------------------------------------------------------------- */
+
+.koenig-lexical.dark,
+html.dark .koenig-lexical {
+	color: var(--fg-primary);
+}
+
+.koenig-lexical.dark .kg-prose,
+html.dark .koenig-lexical .kg-prose,
+.koenig-lexical.dark .kg-prose p,
+.koenig-lexical.dark .kg-prose aside,
+.koenig-lexical.dark .kg-prose ul,
+.koenig-lexical.dark .kg-prose ol,
+.koenig-lexical.dark .kg-prose li,
+html.dark .koenig-lexical .kg-prose p,
+html.dark .koenig-lexical .kg-prose aside,
+html.dark .koenig-lexical .kg-prose ul,
+html.dark .koenig-lexical .kg-prose ol,
+html.dark .koenig-lexical .kg-prose li {
+	color: var(--fg-primary);
+}
+
+.koenig-lexical.dark .kg-prose h1,
+.koenig-lexical.dark .kg-prose h2,
+.koenig-lexical.dark .kg-prose h3,
+.koenig-lexical.dark .kg-prose h4,
+.koenig-lexical.dark .kg-prose h5,
+.koenig-lexical.dark .kg-prose h6,
+html.dark .koenig-lexical .kg-prose h1,
+html.dark .koenig-lexical .kg-prose h2,
+html.dark .koenig-lexical .kg-prose h3,
+html.dark .koenig-lexical .kg-prose h4,
+html.dark .koenig-lexical .kg-prose h5,
+html.dark .koenig-lexical .kg-prose h6 {
+	color: var(--fg-primary);
+}
+
+.koenig-lexical.dark .kg-prose blockquote,
+html.dark .koenig-lexical .kg-prose blockquote {
+	border-left-color: var(--status-draft, #fb2d8d);
+	color: var(--fg-primary);
+}
+
+.koenig-lexical.dark .kg-card,
+.koenig-lexical.dark .kg-image-card,
+.koenig-lexical.dark .kg-gallery-card,
+.koenig-lexical.dark .kg-embed-card,
+.koenig-lexical.dark .kg-bookmark-card,
+.koenig-lexical.dark .kg-bookmark-container,
+.koenig-lexical.dark .kg-file-card,
+.koenig-lexical.dark .kg-file-card-container,
+.koenig-lexical.dark .kg-audio-card,
+.koenig-lexical.dark .kg-code-card,
+.koenig-lexical.dark .kg-callout-card,
+.koenig-lexical.dark .kg-cta-card,
+html.dark .koenig-lexical .kg-card,
+html.dark .koenig-lexical .kg-image-card,
+html.dark .koenig-lexical .kg-gallery-card,
+html.dark .koenig-lexical .kg-embed-card,
+html.dark .koenig-lexical .kg-bookmark-card,
+html.dark .koenig-lexical .kg-bookmark-container,
+html.dark .koenig-lexical .kg-file-card,
+html.dark .koenig-lexical .kg-file-card-container,
+html.dark .koenig-lexical .kg-audio-card,
+html.dark .koenig-lexical .kg-code-card,
+html.dark .koenig-lexical .kg-callout-card,
+html.dark .koenig-lexical .kg-cta-card {
+	border-color: var(--border-default);
+	background: var(--bg-elevated);
+	color: var(--fg-primary);
+}
+
+.koenig-lexical.dark .kg-bookmark-title,
+.koenig-lexical.dark .kg-bookmark-description,
+.koenig-lexical.dark .kg-bookmark-metadata,
+.koenig-lexical.dark figcaption,
+.koenig-lexical.dark .koenig-lexical-caption p,
+html.dark .koenig-lexical .kg-bookmark-title,
+html.dark .koenig-lexical .kg-bookmark-description,
+html.dark .koenig-lexical .kg-bookmark-metadata,
+html.dark .koenig-lexical figcaption,
+html.dark .koenig-lexical .koenig-lexical-caption p {
+	color: var(--fg-secondary);
+}
+
+.koenig-lexical.dark .kg-prose code,
+html.dark .koenig-lexical .kg-prose code {
+	border-color: var(--border-default);
+	background: var(--bg-row-hover);
+	color: var(--fg-primary);
+}
+
+.koenig-lexical.dark .kg-code-card pre,
+html.dark .koenig-lexical .kg-code-card pre {
+	background: var(--bg-elevated);
+	color: var(--fg-primary);
+}

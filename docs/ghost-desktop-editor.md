@@ -1,5 +1,13 @@
 # Ghost Desktop Editor — Plan (rev 2)
 
+> **Legacy historical design document.** This is the original build plan and research log
+> for Geist, preserved for its historical record (verified Ghost behaviours and corrections
+> found while building). It is **not** the current reference.
+>
+> **Current architecture and roadmap live in [`docs/architecture.md`](./architecture.md).**
+> A frozen copy of this file is kept at
+> [`docs/ghost-desktop-editor.md.bak`](./ghost-desktop-editor.md.bak).
+
 A Tauri desktop app for writing, previewing and publishing Ghost posts. It works with any
 Ghost site (self-hosted, Ghost(Pro), Hostinger) using the user's Staff Access Token or a
 Custom Integration Admin API key.
@@ -591,13 +599,19 @@ images included.
 
 ## 12. Roadmap after the weekend
 
-| Version | Contents | Rough size |
+> **Superseded.** The official roadmap is maintained in
+> [`docs/architecture.md`](./architecture.md). It is reproduced here so this historical
+> document stays self-contained.
+
+| Version | Status | Contents |
 |---|---|---|
-| v0.2 Hardening | Metadata sidebar (excerpt, tags, authors, feature image, slug), search/filter, error UX, `tauri-plugin-store`, in-app preview window | 1 week |
-| v0.3 Card parity | The rest of `cardConfig` (§7), audio/video/file uploads, full compatibility policy (§10), "Open in Ghost Admin" fallback | 1–2 weeks |
-| v0.4 Publishing | Scheduling, visibility and tiers, revisions drawer and restore, **newsletter sending behind a confirmation that shows the recipient count** (`GET /newsletters/?include=count.active_members`) | 1 week |
-| v0.5 Password login | §5.4 in Rust, 2FA, automatic Staff Access Token | 3–4 days |
-| v0.6 Distribution | Local draft cache / offline, macOS notarization, `tauri-plugin-updater`, Windows (WebView2) testing | 1 week |
+| v0.1.0 – v0.4.0 | Shipped | Core editor, metadata sidebar, cards parity, theming, publishing/scheduling modal, newsletter safety gate, post visibility/tiers, revisions drawer |
+| v0.5.0 Native | Active | Full macOS design system (`docs/design-system.md`), 3-pane rail, borderless canvas, Koenig retheme |
+| v0.6.0 Auth | Planned | Password login in Rust, session cookie, 2FA verification code, Staff Access Token auto-retrieval, token rotation |
+| v0.7.0 Scraps | Planned | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
+| v0.8.0 Feature Complete | Planned | Offline draft cache, local autosave queue, edge-case hardening |
+| v1.0.0-rc.1 Release Candidate | Planned | Apple code signing & notarization, `tauri-plugin-updater` with GitHub Releases, DMG & Windows installers |
+| v1.0.0 General Availability | Planned | First official public release |
 
 ---
 
@@ -840,8 +854,27 @@ cargo add hmac@0.12 sha2@0.10 base64@0.22 hex serde_json
   - Post access & paid tiers (`src/components/MetadataSidebar.tsx`): `visibility` (`public`, `members`, `paid`, `tiers`) with role guard (`canEditVisibilityRole`) and paid tier selection (`GET /tiers/`).
   - Revisions drawer & restore (`src/components/RevisionsDrawer.tsx`, `src/lib/revisions.ts`): loads `post_revisions` and `post_revisions.author`, previews historical title/excerpt/Lexical plain text, and restores any revision into the editor with a new revision save.
 
-### Next up for v0.5.0
-Password login (§5.4 in Rust): a session cookie obtained from `POST /session/` with the
-site's own `Origin`, 2FA verification code handling (`PUT /session/verify/`), and
-automatic Staff Access Token retrieval (`GET /users/me/token/`) so the user never has to
-paste a key.
+### Next up
+
+The agreed post-v0.4.0 sequence, in order. Each milestone assumes the one before it has
+landed; do not start a later one early.
+
+1. **v0.5.0 Native** (7–10 days) — Native macOS design system (`docs/design-system.md`):
+   vibrancy shell (`titleBarStyle: "Overlay"`, sidebar vibrancy, native macOS menu bar),
+   three-pane Ghost Admin / Apple Notes / Ulysses hybrid layout, borderless
+   distraction-free editor canvas, and the Koenig typography/dark-mode retheme.
+2. **v0.6.0 Auth** (3–4 days) — Password login (§5.4 in Rust): a session cookie obtained
+   from `POST /session/` with the site's own `Origin`, 2FA verification code handling
+   (`PUT /session/verify/`), automatic Staff Access Token retrieval (`GET /users/me/token/`)
+   so the user never has to paste a key, and token rotation. Built on the v0.5 design system.
+3. **v0.7.0 Scraps** (4–6 days) — Local-first private notes and scratchpad area. Scraps are
+   stored purely locally on macOS with `tauri-plugin-store` (zero network latency, offline, and
+   completely private — never uploaded to Ghost or visible to other publication staff).
+   **Promote to Draft** creates a new Ghost draft via `POST /posts/?formats=lexical` with the
+   scrap's title and Lexical body and opens it directly in the editor. **Demote to Scrap** (plus
+   optional drag-and-drop from the post list) backs up an existing draft's title, excerpt, and
+   Lexical JSON to local Scraps storage, confirms with the user, then cleans up the server copy
+   via `DELETE /posts/{id}/`. The Scraps list lives in `NavigationRail` with instant local
+   search, word count, and last-edited timestamps.
+4. **v0.8.0 Distribution** (1 week) — Local draft cache / offline support, macOS
+   notarization, `tauri-plugin-updater`, and Windows (WebView2) testing.

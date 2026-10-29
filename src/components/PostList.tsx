@@ -1,4 +1,3 @@
-import ThemeToggle from "./ThemeToggle";
 import {useCallback, useEffect, useMemo, useState} from "react";
 import {
 	GhostError,
@@ -19,25 +18,178 @@ type Props = {
 	onSelectSite: (site: Site) => void;
 	onDisconnect: () => void;
 	onCreateDraft: () => Promise<Post | null>;
+	/** Optional controlled status filter; the rail and header share it. */
+	filter?: PostStatusFilter;
+	onFilterChange?: (filter: PostStatusFilter) => void;
+	/** Optional controlled search; the rail Quick Search feeds the list. */
+	searchQuery?: string;
+	onSearchQueryChange?: (query: string) => void;
 };
+
+type SortOrder = "newest" | "oldest" | "title";
+
+const FILTERS: {id: PostStatusFilter; label: string}[] = [
+	{id: "all", label: "All"},
+	{id: "draft", label: "Drafts"},
+	{id: "scheduled", label: "Scheduled"},
+	{id: "published", label: "Published"},
+];
+
+const STATUS_LABELS: Record<string, string> = {
+	draft: "Draft",
+	scheduled: "Scheduled",
+	published: "Published",
+	sent: "Sent",
+};
+
+const SORT_LABELS: Record<SortOrder, string> = {
+	newest: "Newest first",
+	oldest: "Oldest first",
+	title: "Title A–Z",
+};
+
+const iconProps = {
+	width: 16,
+	height: 16,
+	viewBox: "0 0 16 16",
+	fill: "none",
+	stroke: "currentColor",
+	strokeWidth: 1.5,
+	strokeLinecap: "round" as const,
+	strokeLinejoin: "round" as const,
+	"aria-hidden": true,
+};
+
+function PencilIcon() {
+	return (
+		<svg {...iconProps}>
+			<path d="M10.25 2.75 13.25 5.75 6 13H3v-3z" />
+			<path d="m9.25 3.75 3 3" />
+		</svg>
+	);
+}
+
+function ImageIcon() {
+	return (
+		<svg {...iconProps}>
+			<rect x="2.25" y="3.25" width="11.5" height="9.5" rx="1.5" />
+			<circle cx="5.75" cy="6.5" r="1" />
+			<path d="m3.25 11 3-3 2.25 2 1.75-1.5 2.5 2.25" />
+		</svg>
+	);
+}
+
+function SortIcon() {
+	return (
+		<svg {...iconProps}>
+			<path d="M4.25 3v10M4.25 3 2 5.25M4.25 3 6.5 5.25" />
+			<path d="M8.5 4.25h5M8.5 8h4M8.5 11.75h3" />
+		</svg>
+	);
+}
+
+function RefreshIcon() {
+	return (
+		<svg {...iconProps}>
+			<path d="M13 6.5A5 5 0 0 0 3.6 4.4L2.5 5.75M3 9.5a5 5 0 0 0 9.4 2.1l1.1-1.35" />
+			<path d="M2.5 3v2.75H5.25M13.5 13v-2.75h-2.75" />
+		</svg>
+	);
+}
+
+function PlusIcon() {
+	return (
+		<svg {...iconProps}>
+			<path d="M8 3.25v9.5M3.25 8h9.5" />
+		</svg>
+	);
+}
+
+function statusLabel(status: string): string {
+	return (
+		STATUS_LABELS[status.toLowerCase()] ??
+		status.charAt(0).toUpperCase() + status.slice(1)
+	);
+}
+
+function statusTone(status: string): string {
+	const key = status.toLowerCase();
+	if (key === "draft" || key === "scheduled" || key === "published") {
+		return key;
+	}
+	return "sent";
+}
+
+function formatPostDate(post: Post): string {
+	const iso =
+		post.status === "published" && post.published_at
+			? post.published_at
+			: post.updated_at;
+	const date = new Date(iso);
+	if (Number.isNaN(date.getTime())) {
+		return "";
+	}
+	return date.toLocaleDateString(undefined, {
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+	});
+}
+
+function byline(post: Post): string {
+	const authors = (post.authors ?? [])
+		.map(author => author.name)
+		.filter(Boolean)
+		.join(", ");
+	const date = formatPostDate(post);
+	if (authors && date) {
+		return `By ${authors} · ${date}`;
+	}
+	if (authors) {
+		return `By ${authors}`;
+	}
+	return date;
+}
 
 export default function PostList({
 	site,
-	sites,
 	onOpenPost,
-	onSelectSite,
 	onDisconnect,
 	onCreateDraft,
+	filter,
+	onFilterChange,
+	searchQuery,
+	onSearchQueryChange,
 }: Props) {
-	const [tab, setTab] = useState<PostStatusFilter>("draft");
-	const [posts, setPosts] = useState<Post[] | null>(null);
+	const [localTab, setLocalTab] = useState<PostStatusFilter>("draft");
+	const [localQuery, setLocalQuery] = useState("");
+	const tab = filter ?? localTab;
+	const query = searchQuery ?? localQuery;
 	const [siteTags, setSiteTags] = useState<TagSummary[]>([]);
-	const [query, setQuery] = useState("");
 	const [tagFilter, setTagFilter] = useState("");
 	const [featuredOnly, setFeaturedOnly] = useState(false);
+	const [sort, setSort] = useState<SortOrder>("newest");
+	const [selectedId, setSelectedId] = useState<string | null>(null);
+	const [posts, setPosts] = useState<Post[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [creating, setCreating] = useState(false);
 	const [refreshTick, setRefreshTick] = useState(0);
+
+	const updateTab = useCallback(
+		(next: PostStatusFilter) => {
+			setLocalTab(next);
+			onFilterChange?.(next);
+		},
+		[onFilterChange],
+	);
+
+	const updateQuery = useCallback(
+		(next: string) => {
+			setLocalQuery(next);
+			onSearchQueryChange?.(next);
+		},
+		[onSearchQueryChange],
+	);
 
 	const load = useCallback(() => {
 		setRefreshTick(t => t + 1);
@@ -104,12 +256,33 @@ export default function PostList({
 		if (!posts) {
 			return null;
 		}
-		return filterPosts(posts, {
+		const filtered = filterPosts(posts, {
 			query,
 			tagSlug: tagFilter,
 			featuredOnly,
 		});
-	}, [posts, query, tagFilter, featuredOnly]);
+		const sorted = [...filtered];
+		switch (sort) {
+			case "oldest":
+				sorted.sort(
+					(a, b) =>
+						Date.parse(a.updated_at) - Date.parse(b.updated_at),
+				);
+				break;
+			case "title":
+				sorted.sort((a, b) =>
+					(a.title || "Untitled").localeCompare(b.title || "Untitled"),
+				);
+				break;
+			default:
+				sorted.sort(
+					(a, b) =>
+						Date.parse(b.updated_at) - Date.parse(a.updated_at),
+				);
+				break;
+		}
+		return sorted;
+	}, [posts, query, tagFilter, featuredOnly, sort]);
 
 	async function handleNewDraft() {
 		if (shouldEnforceReadOnly(site.version)) {
@@ -135,100 +308,55 @@ export default function PostList({
 	}
 
 	const banner = versionBanner(site.version);
+	const hasFilters = Boolean(query || tagFilter || featuredOnly);
 
 	return (
-		<div className="postlist">
-			<header className="postlist-header">
-				<strong className="brand-title">Geist</strong>
-				<select
-					value={site.base}
-					onChange={e => {
-						const next = sites.find(s => s.base === e.target.value);
-						if (next) {
-							onSelectSite(next);
-						}
-					}}
-					aria-label="Site"
-				>
-					{sites.map(s => (
-						<option key={s.base} value={s.base}>
-							{s.title} — {s.base}
-						</option>
-					))}
-				</select>
-				<span className="muted">
-					Ghost {site.version}
-					{site.role ? ` · ${site.role}` : ""}
-				</span>
-				<div className="spacer" />
-				<ThemeToggle />
-				<button type="button" onClick={load} title="Refresh post list">
-					↻
-				</button>
-				<button
-					type="button"
-					className="primary-button"
-					onClick={handleNewDraft}
-					disabled={creating}
-				>
-					{creating ? "Creating…" : "+ New draft"}
-				</button>
-				<button type="button" onClick={onDisconnect}>
-					Sites
-				</button>
-			</header>
-
+		<div className="postlist post-list-pane">
 			{banner && (
 				<div className="warn-banner">
 					<span>{banner}</span>
 				</div>
 			)}
 
-			<div className="postlist-controls">
-				<nav className="tabs" aria-label="Post status filter">
-					<button
-						type="button"
-						className={tab === "draft" ? "active" : ""}
-						onClick={() => setTab("draft")}
-					>
-						Drafts
-					</button>
-					<button
-						type="button"
-						className={tab === "published" ? "active" : ""}
-						onClick={() => setTab("published")}
-					>
-						Published
-					</button>
-					<button
-						type="button"
-						className={tab === "scheduled" ? "active" : ""}
-						onClick={() => setTab("scheduled")}
-					>
-						Scheduled
-					</button>
-					<button
-						type="button"
-						className={tab === "all" ? "active" : ""}
-						onClick={() => setTab("all")}
-					>
-						All
-					</button>
-				</nav>
+			<header className="post-list-header">
+				<h1 className="post-list-title">Posts</h1>
 
-				<div className="filter-bar">
+				<div className="post-list-toolbar">
+					<nav
+						className="post-list-filters"
+						aria-label="Post status filter"
+					>
+						{FILTERS.map(f => (
+							<button
+								key={f.id}
+								type="button"
+								className={
+									tab === f.id
+										? "post-filter-pill is-active"
+										: "post-filter-pill"
+								}
+								onClick={() => updateTab(f.id)}
+								aria-pressed={tab === f.id}
+								data-testid={`post-filter-${f.id}`}
+							>
+								{f.label}
+							</button>
+						))}
+					</nav>
+
 					<input
 						type="search"
-						className="search-input"
+						className="post-list-search"
 						value={query}
-						onChange={e => setQuery(e.target.value)}
-						placeholder="Search title, slug, tag, author…"
+						onChange={e => updateQuery(e.target.value)}
+						placeholder="Search posts"
 						aria-label="Search posts"
 						data-testid="post-search-input"
 					/>
+
 					{availableTags.length > 0 && (
 						<select
-							className="tag-filter-select"
+							className="post-list-select"
 							value={tagFilter}
 							onChange={e => setTagFilter(e.target.value)}
 							aria-label="Filter by tag"
@@ -245,17 +373,61 @@ export default function PostList({
 							})}
 						</select>
 					)}
+
 					<button
 						type="button"
-						className={featuredOnly ? "active-button" : ""}
+						className={
+							featuredOnly
+								? "post-filter-pill post-featured-filter is-active"
+								: "post-filter-pill post-featured-filter"
+						}
 						onClick={() => setFeaturedOnly(f => !f)}
 						title="Filter featured posts"
+						aria-pressed={featuredOnly}
 						data-testid="featured-filter-button"
 					>
 						★ Featured
 					</button>
+
+					<label className="post-list-sort">
+						<SortIcon />
+						<select
+							value={sort}
+							onChange={e => setSort(e.target.value as SortOrder)}
+							aria-label="Sort posts"
+							data-testid="post-sort-select"
+						>
+							{(Object.keys(SORT_LABELS) as SortOrder[]).map(value => (
+								<option key={value} value={value}>
+									{SORT_LABELS[value]}
+								</option>
+							))}
+						</select>
+					</label>
+
+					<button
+						type="button"
+						className="post-list-icon-button"
+						onClick={load}
+						title="Refresh post list"
+						aria-label="Refresh post list"
+						data-testid="refresh-post-list"
+					>
+						<RefreshIcon />
+					</button>
+
+					<button
+						type="button"
+						className="post-list-new-post"
+						onClick={handleNewDraft}
+						disabled={creating}
+						data-testid="new-post-button"
+					>
+						<PlusIcon />
+						{creating ? "Creating…" : "New post"}
+					</button>
 				</div>
-			</div>
+			</header>
 
 			{error && (
 				<div className="error-banner" role="alert">
@@ -271,52 +443,102 @@ export default function PostList({
 				</div>
 			)}
 
-			{filteredPosts === null && !error && <p className="muted">Loading…</p>}
-
-			{filteredPosts?.length === 0 && (
-				<p className="muted">
-					{query || tagFilter || featuredOnly
-						? "No posts match the current search or filters."
-						: `No ${tab === "all" ? "posts" : `${tab} posts`}.`}
-				</p>
+			{filteredPosts === null && !error && (
+				<p className="post-list-message">Loading…</p>
 			)}
 
-			<ul className="posts" data-testid="post-list">
-				{filteredPosts?.map(p => (
-					<li key={p.id}>
-						<button type="button" onClick={() => onOpenPost(p)}>
-							<div className="post-row-top">
-								<span className="post-title">{p.title || "Untitled"}</span>
-								{p.featured && (
-									<span className="badge badge-featured" title="Featured">
-										★ Featured
-									</span>
-								)}
-								{tab === "all" && (
-									<span className={`badge badge-${p.status}`}>{p.status}</span>
-								)}
-							</div>
-							{p.custom_excerpt && (
-								<span className="post-excerpt">{p.custom_excerpt}</span>
-							)}
-							<div className="post-row-meta">
-								{p.tags && p.tags.length > 0 && (
-									<span className="post-tags-inline">
-										{p.tags.map(t => `#${t.name}`).join("  ")}
-									</span>
-								)}
-								{p.authors && p.authors.length > 0 && (
-									<span className="muted">
-										By {p.authors.map(a => a.name).join(", ")}
-									</span>
-								)}
-								<span className="muted">
-									Updated {new Date(p.updated_at).toLocaleString()}
+			{filteredPosts?.length === 0 && (
+				<div className="post-list-empty">
+					<p>
+						{hasFilters
+							? "No posts match the current search or filters."
+							: `No ${tab === "all" ? "posts" : `${tab} posts`}.`}
+					</p>
+					<button
+						type="button"
+						className="post-list-new-post"
+						onClick={handleNewDraft}
+						disabled={creating}
+						data-testid="new-post-button-empty"
+					>
+						<PlusIcon />
+						New post
+					</button>
+				</div>
+			)}
+
+			<ul className="posts post-list" data-testid="post-list">
+				{filteredPosts?.map(p => {
+					const title = p.title || "Untitled";
+					const selected = selectedId === p.id;
+					return (
+						<li
+							key={p.id}
+							className={
+								selected ? "post-row is-selected" : "post-row"
+							}
+							data-testid={`post-row-${p.id}`}
+						>
+							<button
+								type="button"
+								className="post-row-main"
+								onClick={() => {
+									setSelectedId(p.id);
+									onOpenPost(p);
+								}}
+							>
+								<span className="post-row-thumb" aria-hidden="true">
+									{p.feature_image ? (
+										<img
+											src={p.feature_image}
+											alt=""
+											loading="lazy"
+										/>
+									) : (
+										<ImageIcon />
+									)}
 								</span>
-							</div>
-						</button>
-					</li>
-				))}
+								<span className="post-row-body">
+									<span className="post-row-title-row">
+										{p.featured && (
+											<span
+												className="post-row-star"
+												role="img"
+												aria-label="Featured"
+												title="Featured"
+											>
+												★
+											</span>
+										)}
+										<span className="post-row-title" title={title}>
+											{title}
+										</span>
+									</span>
+									<span className="post-row-byline">{byline(p)}</span>
+									<span
+										className={`post-status post-status-${statusTone(
+											p.status,
+										)}`}
+									>
+										{statusLabel(p.status)}
+									</span>
+								</span>
+							</button>
+							<button
+								type="button"
+								className="post-row-edit"
+								onClick={() => {
+									setSelectedId(p.id);
+									onOpenPost(p);
+								}}
+								aria-label={`Edit ${title}`}
+								title={`Edit ${title}`}
+							>
+								<PencilIcon />
+							</button>
+						</li>
+					);
+				})}
 			</ul>
 		</div>
 	);

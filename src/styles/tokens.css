@@ -1,0 +1,158 @@
+/*
+ * Geist design tokens — v0.5.0 "Native"
+ *
+ * Source of truth: docs/design-system.md §2 (color & surface), §3.1 (families),
+ * §4.8 (geometry) and §5 (appearance matrix). Do not hard-code a hex color,
+ * radius, font size, or spacing value in a component; add a token here instead.
+ */
+
+:root {
+	color-scheme: light;
+
+	/* Surfaces */
+	--bg-canvas: #ffffff;
+	--bg-sidebar: rgba(250, 250, 251, 0.82);
+	--bg-sidebar-solid: #fafafb;
+	--bg-elevated: #ffffff;
+	--bg-glass-pill: rgba(255, 255, 255, 0.72);
+	--bg-row-hover: #fafafb;
+	--bg-row-selected: #ebeef0;
+
+	/* Text */
+	--fg-primary: #15171a;
+	--fg-primary-alpha: rgba(0, 0, 0, 0.85);
+	--fg-secondary: #7c8b9a;
+	--fg-secondary-alpha: rgba(0, 0, 0, 0.55);
+	--fg-muted: #aeb7c1;
+	--fg-muted-alpha: rgba(0, 0, 0, 0.25);
+	--fg-tertiary: #aeb7c1;
+	--fg-tertiary-alpha: rgba(0, 0, 0, 0.25);
+
+	/* Borders */
+	--border-default: #e4e7eb;
+	--border-subtle: #f4f5f6;
+
+	/* Accents */
+	--accent-primary-bg: #15171a;
+	--accent-primary-fg: #ffffff;
+	--status-publish: #30cf43;
+	--status-draft: #fb2d8d;
+	--status-scheduled: #30cf43;
+	--status-sent: #7c8b9a;
+	--status-danger: #f50b23;
+
+	/* Materials */
+	--glass-blur: blur(16px) saturate(180%);
+
+	/* Typography (§3.1) */
+	--font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+		"Inter", system-ui, sans-serif;
+	--font-serif: Georgia, "Times New Roman", serif;
+	--font-mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+	/* Geometry (§4.8) */
+	--radius-sm: 4px;
+	--radius-md: 6px;
+	--radius-lg: 12px;
+	--radius-pill: 9999px;
+
+	--window-min-width: 960px;
+	--window-min-height: 640px;
+	--titlebar-height: 52px;
+	--traffic-light-gutter: 78px;
+
+	--rail-width: 260px;
+	--rail-inset: 8px;
+	--list-min-width: 300px;
+	--editor-measure: 740px;
+	--inspector-width: 320px;
+
+	--row-height: 32px;
+	--control-height: 32px;
+	--control-height-compact: 28px;
+
+	--motion-duration: 180ms;
+	--motion-ease: cubic-bezier(0.2, 0, 0, 1);
+
+	/* Spacing — 4px steps on the 8px rhythm (§1 rule 4) */
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 24px;
+	--space-8: 32px;
+	--space-10: 40px;
+	--space-12: 48px;
+	--space-14: 56px;
+	--space-24: 96px;
+
+	/* Elevation — hairlines do the work; shadows only for the rail and sheets */
+	--shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04);
+	--shadow-sheet: 0 24px 64px rgba(0, 0, 0, 0.24);
+	--scrim-sheet: rgba(0, 0, 0, 0.24);
+}
+
+html.dark {
+	color-scheme: dark;
+
+	--bg-canvas: #111112;
+	--bg-sidebar: rgba(22, 23, 25, 0.82);
+	--bg-sidebar-solid: #161719;
+	--bg-elevated: #1d1e20;
+	--bg-glass-pill: rgba(35, 36, 37, 0.72);
+	--bg-row-hover: #161719;
+	--bg-row-selected: #2d2f32;
+
+	--fg-primary: #edeeee;
+	--fg-primary-alpha: rgba(255, 255, 255, 0.85);
+	--fg-secondary: #9da0a3;
+	--fg-secondary-alpha: rgba(255, 255, 255, 0.55);
+	--fg-muted: #696c6f;
+	--fg-muted-alpha: rgba(255, 255, 255, 0.25);
+	--fg-tertiary: #696c6f;
+	--fg-tertiary-alpha: rgba(255, 255, 255, 0.25);
+
+	--border-default: #232425;
+	--border-subtle: #28282a;
+
+	--accent-primary-bg: #edeeee;
+	--accent-primary-fg: #15171a;
+	--status-publish: #58da67;
+	/* --status-draft, --status-scheduled, --status-sent, --status-danger inherit */
+}
+
+/*
+ * Reduced transparency (§5): no vibrancy tint, no glass, solid fallbacks only.
+ * The helper checks in src/lib/theme.ts expose the same query to JavaScript.
+ */
+@media (prefers-reduced-transparency: reduce) {
+	:root {
+		--bg-sidebar: #fafafb;
+		--bg-glass-pill: #ffffff;
+		--glass-blur: none;
+	}
+
+	html.dark {
+		--bg-sidebar: #161719;
+		--bg-glass-pill: #232425;
+	}
+}
+
+/* Browsers without backdrop-filter get an opaque glass fill (§5). */
+@supports not (backdrop-filter: blur(16px)) {
+	:root {
+		--bg-glass-pill: #ffffff;
+	}
+
+	html.dark {
+		--bg-glass-pill: #232425;
+	}
+}
+
+/* Reduced motion (§5): every transition and transform collapses to instant. */
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--motion-duration: 0ms;
+	}
+}
