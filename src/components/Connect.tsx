@@ -11,6 +11,8 @@ import {
 	type Site,
 } from "../lib/api";
 import {upsertSite, removeSite} from "../lib/sites";
+import {clearSiteDraftCache} from "../lib/draftCache";
+import {clearSiteScraps} from "../lib/scraps";
 import {versionBanner} from "../lib/version";
 
 type Props = {
@@ -226,6 +228,12 @@ export default function Connect({sites, onReady, onSitesChanged}: Props) {
 
 	function handleForget(base: string) {
 		void invoke("delete_key", {base}).catch(() => {});
+		// Purge local content tied to this site so stale drafts and scraps do
+		// not linger on disk after the credentials are removed.
+		void Promise.allSettled([
+			clearSiteDraftCache(base),
+			clearSiteScraps(base),
+		]);
 		onSitesChanged(removeSite(base));
 	}
 

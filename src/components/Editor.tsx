@@ -18,8 +18,15 @@ import {
 	type TagSummary,
 	type TierSummary,
 } from "../lib/api";
-import {createSaver, type SaveStatus} from "../lib/saver";
+import {createSaver, isNetworkError, type SaveStatus} from "../lib/saver";
 import {createChangeFilter} from "../lib/changeFilter";
+import {
+	cacheDraft,
+	getCachedDraft,
+	listPendingPatches,
+	markDraftClean,
+	removeCachedDraft,
+} from "../lib/draftCache";
 import {
 	DEFAULT_SETTINGS,
 	buildCardConfig,
@@ -78,6 +85,7 @@ const STATUS_COPY: Record<SaveStatus, string> = {
 	saved: "Saved",
 	conflict: "Conflict",
 	error: "Save failed",
+	offline: "Offline (Saved locally)",
 };
 
 /** Walk a Lexical editor-state JSON tree and collect its text runs. */
@@ -208,6 +216,10 @@ export default function Editor({
 		useState<PreviewMemberStatus>("default");
 
 	const [status, setStatus] = useState<SaveStatus>("clean");
+	// Read by the long-lived close listener, which must not re-subscribe on
+	// every save-status change.
+	const statusRef = useRef<SaveStatus>("clean");
+	statusRef.current = status;
 	const [statusMessage, setStatusMessage] = useState<string | undefined>();
 	const [error, setError] = useState<string | null>(null);
 	const [errorStatus, setErrorStatus] = useState<number | undefined>();
@@ -222,7 +234,11 @@ export default function Editor({
 	const [snippets, setSnippets] = useState<Snippet[]>([]);
 	const [wordCount, setWordCount] = useState(0);
 
+	const [offlineCachedAt, setOfflineCachedAt] = useState<string | null>(null);
+
 	const saverRef = useRef<ReturnType<typeof createSaver> | null>(null);
+	/** Latest known post, including patches the saver has not round-tripped. */
+	const postRef = useRef<PostDetail | null>(null);
 	const changeFilterRef = useRef(createChangeFilter());
 	const editorErrorRef = useRef(false);
 	const activePostIdRef = useRef<string | undefined>(postId);
@@ -242,6 +258,12 @@ export default function Editor({
 	useEffect(() => {
 		activePostIdRef.current = postId;
 	}, [postId]);
+
+	// Keep the ref in sync with the rendered post so a stale copy cannot leak
+	// into the saver's cache bookkeeping after publish/schedule/restore.
+	useEffect(() => {
+		postRef.current = post;
+	}, [post]);
 
 	// Any long-running publish/promote/demote action suspends scrap autosave;
 	// the promote/demote handlers also set this synchronously before awaiting.
@@ -298,6 +320,7 @@ export default function Editor({
 	const bindPost = useCallback(
 		(p: PostDetail) => {
 			setPost(p);
+			postRef.current = p;
 			setScrap(null);
 			scrapRef.current = null;
 			setTitle(p.title ?? "");
@@ -306,6 +329,7 @@ export default function Editor({
 			setConflict(false);
 			setStatus("clean");
 			setStatusMessage(undefined);
+			setOfflineCachedAt(null);
 			setEditorError(null);
 			editorErrorRef.current = false;
 			changeFilterRef.current.reset();
@@ -315,6 +339,53 @@ export default function Editor({
 					setStatusMessage(message);
 				},
 				onConflict: () => setConflict(true),
+				// Never lose work when the network drops: the dirty patch (and
+				// any edits queued behind it) is written to the local cache.
+				onOfflineSave: async patch => {
+					const base = postRef.current ?? p;
+					// A second offline edit must not drop the first one: merge
+					// any already-cached pending patch under the new edits.
+					let existingPatch: Partial<PostDetail> = {};
+					try {
+						const cached = await getCachedDraft(site.base, p.id);
+						if (cached?.pendingPatch) {
+							existingPatch = cached.pendingPatch;
+						}
+					} catch {
+						/* Cache reads are best-effort. */
+					}
+					const mergedPatch = {
+						...existingPatch,
+						...patch,
+					} as Partial<PostDetail>;
+					const cachedPost = {
+						...base,
+						...mergedPatch,
+						id: p.id,
+					} as PostDetail;
+					postRef.current = cachedPost;
+					await cacheDraft(site.base, cachedPost, {
+						dirty: true,
+						pendingPatch: mergedPatch,
+					});
+				},
+				// A successful PUT means the local copy matches the server.
+				onSaveSuccess: (updatedAt, patch) => {
+					const base = postRef.current ?? p;
+					const freshPost = {
+						...base,
+						...patch,
+						id: p.id,
+						updated_at: updatedAt,
+					} as PostDetail;
+					postRef.current = freshPost;
+					setOfflineCachedAt(null);
+					void markDraftClean(site.base, p.id, freshPost).catch(
+						() => {
+							/* Cache bookkeeping is best-effort. */
+						},
+					);
+				},
 			});
 		},
 		[site],
@@ -324,6 +395,8 @@ export default function Editor({
 		setScrap(s);
 		scrapRef.current = s;
 		setPost(null);
+		postRef.current = null;
+		setOfflineCachedAt(null);
 		setTitle(s.title);
 		setLexical(s.lexical);
 		setMeta({...EMPTY_META, customExcerpt: s.customExcerpt ?? ""});
@@ -373,15 +446,59 @@ export default function Editor({
 		}
 
 		fetchPost(site, postId)
-			.then(p => {
+			.then(async p => {
 				if (cancelled) {
 					return;
 				}
 				bindPost(p);
+				// Keep a local copy so the post can be reopened offline.
+				try {
+					const cached = await getCachedDraft(site.base, p.id);
+					if (cancelled) {
+						return;
+					}
+					if (cached?.dirty && cached.pendingPatch) {
+						// Local edits are newer than the server copy: replay them
+						// rather than overwriting the dirty cache with a clean one.
+						saverRef.current?.queue(
+							cached.pendingPatch as Record<string, unknown>,
+						);
+						await saverRef.current?.flush();
+					} else {
+						await cacheDraft(site.base, p);
+					}
+				} catch {
+					/* Caching is best-effort; the editor still works without it. */
+				}
 			})
-			.catch(err => {
+			.catch(async err => {
 				if (cancelled) {
 					return;
+				}
+				if (isNetworkError(err)) {
+					const cached = await getCachedDraft(site.base, postId).catch(
+						() => null,
+					);
+					if (cancelled) {
+						return;
+					}
+					if (cached) {
+						bindPost(cached.post);
+						// Show when the copy was taken; set after bindPost,
+						// which clears the banner for a fresh load.
+						setOfflineCachedAt(cached.cachedAt);
+						// Replay edits that never reached Ghost so the saver
+						// still knows about them when the connection returns.
+						if (
+							cached.pendingPatch &&
+							Object.keys(cached.pendingPatch).length > 0
+						) {
+							saverRef.current?.queue(
+								cached.pendingPatch as Record<string, unknown>,
+							);
+						}
+						return;
+					}
 				}
 				if (err instanceof GhostError) {
 					setError(err.message);
@@ -395,6 +512,42 @@ export default function Editor({
 			cancelled = true;
 		};
 	}, [site, postId, scrapId, bindPost, bindScrap]);
+
+	// When the connection comes back, push any edits that were saved locally
+	// while offline. 409 still wins: the saver halts rather than clobbering.
+	useEffect(() => {
+		if (!postId || scrapId) {
+			return;
+		}
+		let cancelled = false;
+
+		async function replayPendingPatches() {
+			if (activePostIdRef.current !== postId) {
+				return;
+			}
+			try {
+				const pending = await listPendingPatches(site.base);
+				if (cancelled || activePostIdRef.current !== postId) {
+					return;
+				}
+				const target = pending.find(draft => draft.postId === postId);
+				const patch = target?.pendingPatch;
+				if (!patch || Object.keys(patch).length === 0) {
+					return;
+				}
+				saverRef.current?.queue(patch as Record<string, unknown>);
+				await saverRef.current?.flush();
+			} catch {
+				/* Still unreachable; the patch stays cached for next time. */
+			}
+		}
+
+		window.addEventListener("online", replayPendingPatches);
+		return () => {
+			cancelled = true;
+			window.removeEventListener("online", replayPendingPatches);
+		};
+	}, [site.base, postId, scrapId]);
 
 	// Post-only metadata pickers. Local scraps never need the Ghost taxonomy.
 	useEffect(() => {
@@ -701,6 +854,45 @@ export default function Editor({
 
 		getCurrentWindow()
 			.onCloseRequested(async event => {
+				if (isScrapMode) {
+					const hasPendingPatch =
+						Object.keys(pendingScrapPatchRef.current).length > 0;
+					const autosaveActive =
+						scrapSaveTimerRef.current !== undefined;
+					const saveStatus = statusRef.current;
+					const unsaved =
+						hasPendingPatch ||
+						autosaveActive ||
+						saveStatus === "dirty" ||
+						(saveStatus as string) === "unsaved" ||
+						saveStatus === "error";
+					if (!unsaved) {
+						return; // nothing to lose
+					}
+					event.preventDefault();
+					const save = window.confirm(
+						"You have unsaved edits in this scrap. Save them before closing?",
+					);
+					try {
+						if (save) {
+							await flushScrapSave();
+							if (
+								Object.keys(pendingScrapPatchRef.current)
+									.length > 0
+							) {
+								// Still unsaved (e.g. disk error): leave the
+								// window open rather than discard the work.
+								return;
+							}
+						}
+						await getCurrentWindow().destroy().catch(() => {});
+					} catch {
+						// Could not save: leave the window open rather than
+						// throw the work away silently.
+					}
+					return;
+				}
+
 				const saver = saverRef.current;
 				if (!saver?.hasPending || saver.conflict) {
 					return; // nothing to lose
@@ -734,7 +926,7 @@ export default function Editor({
 			cancelled = true;
 			unlisten?.();
 		};
-	}, []);
+	}, [isScrapMode, flushScrapSave]);
 
 	function markInteraction() {
 		changeFilterRef.current.markInteraction();
@@ -784,7 +976,11 @@ export default function Editor({
 					<div className="banner-actions">
 						<button
 							type="button"
-							onClick={() => openPostInAdmin(post.id, site)}
+							onClick={() => {
+								void openPostInAdmin(post.id, site).catch(
+									() => {},
+								);
+							}}
 						>
 							Open in Ghost Admin ↗
 						</button>
@@ -804,9 +1000,9 @@ export default function Editor({
 			await openInAppPreview(site.siteUrl, post.uuid, title, previewMode);
 		} catch (err) {
 			// Fall back to system browser if the preview window fails for any reason.
-			openUrl(previewUrl(site.siteUrl, post.uuid, previewMode)).catch(e =>
-				setError(String(e)),
-			);
+			void openUrl(
+				previewUrl(site.siteUrl, post.uuid, previewMode),
+			).catch(() => {});
 			if (err instanceof Error) {
 				setError(err.message);
 			}
@@ -818,9 +1014,9 @@ export default function Editor({
 			return;
 		}
 		await saverRef.current?.flush();
-		openUrl(previewUrl(site.siteUrl, post.uuid, previewMode)).catch(err =>
-			setError(String(err)),
-		);
+		void openUrl(
+			previewUrl(site.siteUrl, post.uuid, previewMode),
+		).catch(() => {});
 	}
 
 	async function handleReloadServerVersion() {
@@ -832,6 +1028,11 @@ export default function Editor({
 			saverRef.current?.halt();
 			const fresh = await fetchPost(site, post.id);
 			bindPost(fresh);
+			// The user chose the server copy: clear any dirty cache so those
+			// discarded local edits are not replayed on the next load.
+			void markDraftClean(site.base, fresh.id, fresh).catch(() => {
+				/* Cache bookkeeping is best-effort. */
+			});
 			setEditorVersion(v => v + 1);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -845,7 +1046,16 @@ export default function Editor({
 		setError(null);
 		try {
 			const fresh = await fetchPost(site, post.id);
-			await saverRef.current.resumeWithUpdatedAt(fresh.updated_at);
+			// The saver is halted while the 409 banner is shown, so edits typed
+			// during the conflict never entered its pending patch. Queue the
+			// full on-screen state before resuming so the overwrite keeps them.
+			const currentPatch = {
+				title,
+				lexical,
+				custom_excerpt: meta.customExcerpt,
+			};
+			saverRef.current?.queue(currentPatch);
+			await saverRef.current?.resumeWithUpdatedAt(fresh.updated_at);
 			setConflict(false);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -1110,6 +1320,9 @@ export default function Editor({
 		try {
 			saverRef.current?.halt();
 			await deletePost(site, post.id);
+			await removeCachedDraft(site.base, post.id).catch(() => {
+				/* Cache bookkeeping is best-effort. */
+			});
 			onBack();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -1365,6 +1578,19 @@ export default function Editor({
 									Enable editing anyway
 								</button>
 							)}
+						</div>
+					)}
+
+					{offlineCachedAt && (
+						<div
+							className="warn-banner"
+							data-testid="offline-cached-banner"
+						>
+							<span>
+								Working offline — displaying cached copy from{" "}
+								{new Date(offlineCachedAt).toLocaleString()}. Local
+								edits will sync when reconnected.
+							</span>
 						</div>
 					)}
 

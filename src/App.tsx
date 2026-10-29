@@ -29,7 +29,8 @@ type View =
 	| {name: "connect"}
 	| {name: "list"}
 	| {name: "editor"; postId: string}
-	| {name: "scrap-editor"};
+	| {name: "scrap-editor"}
+	| {name: "scrap"};
 
 type ListView = "posts" | "scraps";
 
@@ -53,6 +54,9 @@ function saveStatusFromCopy(copy: string): SaveStatus {
 	}
 	if (text.startsWith("conflict")) {
 		return "conflict";
+	}
+	if (text.startsWith("offline")) {
+		return "offline";
 	}
 	if (text.includes("failed") || text.startsWith("error")) {
 		return "error";
@@ -358,9 +362,14 @@ export default function App() {
 	}, [handleNewPost, toggleSidebar, toggleInspector, cycleTheme]);
 
 	// Keep the titlebar's title, status and save indicator in step with the
-	// editor. The editor remains the owner of all three.
-	useEffect(() => {
-		if (route.name !== "editor") {
+	// editor. The editor remains the owner of all three. Scraps use the same
+	// `save-status` element, so the titlebar mirrors their local save state too.
+	useEffect(function syncActivePostFromDom() {
+		if (
+			route.name !== "editor" &&
+			route.name !== "scrap-editor" &&
+			(route.name as string) !== "scrap"
+		) {
 			return;
 		}
 
@@ -437,7 +446,9 @@ export default function App() {
 			postTitle={activePost?.title ?? (activeScrapId ? "Scrap" : null)}
 			postStatus={activePost?.status ?? null}
 			saveStatus={
-				route.name === "editor" || route.name === "scrap-editor"
+				route.name === "editor" ||
+				route.name === "scrap-editor" ||
+				(route.name as string) === "scrap"
 					? saveStatus
 					: null
 			}

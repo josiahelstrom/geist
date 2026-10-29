@@ -204,6 +204,80 @@ describe("revisions", () => {
 	});
 });
 
+describe("offline handling", () => {
+	it("persists the dirty patch and reports offline on a network failure", async () => {
+		responder = () => {
+			throw new TypeError("Failed to fetch");
+		};
+		const statuses: string[] = [];
+		const onOfflineSave = vi.fn().mockResolvedValue(undefined);
+		const saver = createSaver(SITE, "p1", "T0", {
+			onStatus: s => statuses.push(s),
+			onConflict: () => {},
+			onOfflineSave,
+		});
+
+		await saver.queue({title: "offline work", lexical: "{}"});
+
+		expect(onOfflineSave).toHaveBeenCalledOnce();
+		expect(onOfflineSave).toHaveBeenCalledWith({
+			title: "offline work",
+			lexical: "{}",
+		});
+		expect(statuses).toContain("offline");
+		expect(statuses).not.toContain("error");
+		// The saver is not halted: the edits stay queued for a retry.
+		expect(saver.conflict).toBe(false);
+		expect(saver.hasPending).toBe(true);
+	});
+
+	it("treats Tauri's reqwest transport error as a network failure", async () => {
+		// The Tauri HTTP plugin rejects with reqwest's message rather than the
+		// browser's "Failed to fetch"; this must still take the offline path.
+		responder = () => {
+			throw new Error(
+				"error sending request for url (https://myblog.com/ghost/api/admin/posts/p1/)",
+			);
+		};
+		const statuses: string[] = [];
+		const onOfflineSave = vi.fn().mockResolvedValue(undefined);
+		const saver = createSaver(SITE, "p1", "T0", {
+			onStatus: s => statuses.push(s),
+			onConflict: () => {},
+			onOfflineSave,
+		});
+
+		await saver.queue({title: "tauri offline"});
+
+		expect(onOfflineSave).toHaveBeenCalledOnce();
+		expect(onOfflineSave).toHaveBeenCalledWith({title: "tauri offline"});
+		expect(statuses).toContain("offline");
+		expect(statuses).not.toContain("error");
+		expect(saver.conflict).toBe(false);
+	});
+
+	it("retries the kept patch once the network returns", async () => {
+		responder = () => {
+			throw new TypeError("Failed to fetch");
+		};
+		const saver = createSaver(SITE, "p1", "T0", {
+			onStatus: () => {},
+			onConflict: () => {},
+			onOfflineSave: () => {},
+		});
+		await saver.queue({title: "written offline"});
+
+		responder = () => ok({posts: [{updated_at: "T_RECONNECTED"}]});
+		await saver.flush();
+
+		expect(puts).toHaveLength(2);
+		expect(JSON.parse(puts[1].body as string).posts[0]).toMatchObject({
+			title: "written offline",
+			updated_at: "T0",
+		});
+	});
+});
+
 describe("conflict handling", () => {
 	it("halts on 409, reports the conflict, and keeps the pending patch", async () => {
 		responder = () => fail(409, "UPDATE_COLLISION", "Someone else is editing");
@@ -247,6 +321,40 @@ describe("conflict handling", () => {
 		await saver.flush();
 		expect(puts).toHaveLength(2);
 		expect(JSON.parse(puts[1].body as string).posts[0].title).toBe("kept");
+	});
+
+	it("ignores debounced keystrokes after a conflict", async () => {
+		responder = () => fail(409, "UPDATE_COLLISION", "Someone else is editing");
+		const statuses: string[] = [];
+		const saver = createSaver(SITE, "p1", "STALE", {
+			onStatus: s => statuses.push(s),
+			onConflict: () => {},
+		});
+
+		await saver.queue({title: "mine"});
+		expect(saver.conflict).toBe(true);
+
+		statuses.length = 0;
+		puts.length = 0;
+		saver.queueDebounced({title: "typing after conflict"});
+
+		expect(statuses).not.toContain("dirty");
+		expect(puts).toHaveLength(0);
+	});
+
+	it("never treats a 409 as an offline save", async () => {
+		responder = () => fail(409, "UPDATE_COLLISION", "Someone else is editing");
+		const onOfflineSave = vi.fn();
+		const saver = createSaver(SITE, "p1", "STALE", {
+			onStatus: () => {},
+			onConflict: () => {},
+			onOfflineSave,
+		});
+
+		await saver.queue({title: "mine"});
+
+		expect(onOfflineSave).not.toHaveBeenCalled();
+		expect(saver.conflict).toBe(true);
 	});
 
 	it("adopts a fresh updated_at after an out-of-band publish so the next edit does not 409", async () => {

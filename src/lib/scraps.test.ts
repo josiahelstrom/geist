@@ -28,6 +28,10 @@ vi.mock("@tauri-apps/plugin-store", () => ({
 			storeMock.snapshots.push({key, value});
 		}
 
+		async delete(key: string) {
+			storeMock.data.delete(key);
+		}
+
 		async save() {
 			/* no-op */
 		}
@@ -61,6 +65,7 @@ vi.mock("@tauri-apps/plugin-http", () => ({
 import {
 	__resetScrapsForTests,
 	calculateWordCount,
+	clearSiteScraps,
 	createInitialScrapLexical,
 	createScrap,
 	deleteScrap,
@@ -386,6 +391,67 @@ describe("promoteScrapToDraft", () => {
 		expect(stored?.title).toBe("Keep me");
 	});
 
+	it("reuses the linked draft instead of creating a duplicate on retry", async () => {
+		mockState.responder = (_url, init) =>
+			init?.method === "POST"
+				? {posts: [ghostPost({id: "post-new"})]}
+				: {posts: [ghostPost({id: "post-existing"})]};
+
+		const scrap = await createScrap(GHOST_SITE.base, {title: "Retry me"});
+		await updateScrap(GHOST_SITE.base, scrap.id, {
+			promotedPostId: "post-existing",
+		});
+
+		const post = await promoteScrapToDraft(GHOST_SITE, scrap.id, {
+			deleteScrapAfter: false,
+		});
+
+		expect(post.id).toBe("post-existing");
+		expect(
+			mockState.requests.some(
+				request => request.init.method === "POST",
+			),
+		).toBe(false);
+	});
+
+	it("creates a fresh draft when the linked post is gone", async () => {
+		mockState.responder = (_url, init) => {
+			if (init?.method === "POST") {
+				return {posts: [ghostPost({id: "post-new"})]};
+			}
+			return {
+				ok: false,
+				status: 404,
+				json: async () => ({
+					errors: [
+						{code: "NOT_FOUND", message: "Post not found"},
+					],
+				}),
+			};
+		};
+
+		const scrap = await createScrap(GHOST_SITE.base, {
+			title: "Retry me",
+		});
+		await updateScrap(GHOST_SITE.base, scrap.id, {
+			promotedPostId: "post-deleted",
+		});
+
+		const post = await promoteScrapToDraft(GHOST_SITE, scrap.id, {
+			deleteScrapAfter: false,
+		});
+
+		expect(post.id).toBe("post-new");
+		expect(
+			mockState.requests.filter(
+				request => request.init.method === "POST",
+			),
+		).toHaveLength(1);
+
+		const stored = await getScrap(GHOST_SITE.base, scrap.id);
+		expect(stored?.promotedPostId).toBe("post-new");
+	});
+
 	it("sends no newsletter, email_segment, or html fields", async () => {
 		mockState.responder = () => ({posts: [ghostPost()]});
 		const scrap = await createScrap(GHOST_SITE.base, {title: "Safe"});
@@ -565,6 +631,23 @@ describe("local store resilience", () => {
 		expect(writes).toHaveLength(3);
 		expect(writes[1].map(item => item.promotedPostId)).toEqual(["post-99"]);
 		expect(writes[2]).toEqual([]);
+	});
+	it("clears only the forgotten site's scraps", async () => {
+		enableTauriRuntime();
+		const siteKey = `scraps_${encodeURIComponent(SITE)}`;
+		const otherKey = `scraps_${encodeURIComponent(OTHER_SITE)}`;
+
+		await createScrap(SITE, {title: "Forget me"});
+		await createScrap(OTHER_SITE, {title: "Keep me"});
+		expect(storeMock.data.has(siteKey)).toBe(true);
+		expect(storeMock.data.has(otherKey)).toBe(true);
+
+		await clearSiteScraps(SITE);
+
+		expect(storeMock.data.has(siteKey)).toBe(false);
+		expect(storeMock.data.has(otherKey)).toBe(true);
+		await expect(listScraps(SITE)).resolves.toEqual([]);
+		await expect(listScraps(OTHER_SITE)).resolves.toHaveLength(1);
 	});
 });
 

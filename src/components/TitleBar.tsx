@@ -38,6 +38,7 @@ const SAVE_LABELS: Record<SaveStatus, string> = {
 	saved: "Saved",
 	conflict: "Conflict",
 	error: "Save failed",
+	offline: "Offline (Saved locally)",
 };
 
 const THEME_LABELS: Record<Theme, string> = {

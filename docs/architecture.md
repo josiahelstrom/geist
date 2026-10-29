@@ -140,8 +140,9 @@ the cdhash on every rebuild and breaks the Keychain ACL.
 | `v0.5.0 Native` | **Shipped** | Full macOS design system, 3-pane rail, borderless canvas, Koenig retheme |
 | `v0.6.0 Auth` | **Shipped** | Password login in Rust, session cookie, 2FA verification code, Staff Access Token auto-retrieval, token rotation |
 | `v0.7.0 Scraps` | **Shipped** | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
-| `v0.8.0 Feature Complete` | **Next Up** | Offline draft cache, local autosave queue, edge-case hardening |
-| `v1.0.0-rc.1 Release Candidate` | Planned | Apple code signing & notarization, `tauri-plugin-updater` with GitHub Releases, DMG & Windows installers |
+| `v0.8.0 Feature Complete` | **Shipped** | Offline draft cache (`draft_cache.json`), `offline` save status, offline editing from cached copies, automatic replay of dirty patches on reconnect |
+| `v0.8.1 Maintenance` | **Shipped** | Code review hardening: conflict overwrite preservation, scrap mode close guard, titlebar status mirror, promote idempotency, forget site cache purge |
+| `v1.0.0-rc.1 Release Candidate` | **Next Up** | Apple code signing & notarization, `tauri-plugin-updater` with GitHub Releases, DMG & Windows installers |
 | `v1.0.0 General Availability` | Planned | First official public release |
 
 ### Milestone detail
@@ -174,11 +175,22 @@ locally, confirms, then deletes the server copy, and only accepts posts still in
 status. Scraps live in `NavigationRail` with local search, word count and last-edited
 timestamps.
 
-**v0.8.0 Feature Complete.** Offline draft cache, a durable local autosave queue that
-replays on reconnect, and hardening of remaining edge cases (large media, long sessions,
-version drift).
+**v0.8.0 Feature Complete (shipped).** Offline resilience. Every opened post is written
+to a local draft cache (`draft_cache.json` through `tauri-plugin-store`, keyed per
+publication), so it can be reopened and edited offline from the cached copy. When a save
+fails because the request never reached Ghost, the single-flight saver preserves the
+pending patch, reports `status: "offline"`, and persists it with the cached draft.
+Dirty patches are replayed automatically when the connection returns (`online` event);
+a `409` still halts the saver. This completes the feature set.
 
-**v1.0.0-rc.1.** Apple Developer ID signing and notarization, `tauri-plugin-updater`
-backed by GitHub Releases, DMG packaging, and Windows installer groundwork.
+**v0.8.1 Maintenance (shipped).** Edge-case hardening from wide-level code review: dirty
+state typed during 409 collisions is preserved on overwrite; scrap mode prompts and
+flushes on window close requests; titlebar save status mirrors local scraps; promote-to-draft
+reuses existing drafts across retries to prevent duplicate Ghost posts; forgetting a site
+purges its cached drafts and scraps from disk; and opener actions catch unhandled rejections.
+
+**v1.0.0-rc.1 (next up).** Apple Developer ID signing and notarization,
+`tauri-plugin-updater` backed by GitHub Releases, DMG packaging, and Windows installer
+groundwork.
 
 **v1.0.0 GA.** First official public release.

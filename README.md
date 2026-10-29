@@ -32,7 +32,7 @@ Override the signing identity with `GEIST_SIGN_IDENTITY` if yours differs.
 ## Checks
 
 ```bash
-npm run check        # tsc --noEmit + 186 unit tests
+npm run check        # tsc --noEmit + 217 unit tests
 npm run test:rust    # keyring round-trip, HTTP scope, preview URL guard, JWT minting,
                      # staff login/2FA handling
 ```
@@ -54,7 +54,7 @@ npm run tauri build
 
 The `.app` and `.dmg` land in:
 - `src-tauri/target/release/bundle/macos/Geist.app`
-- `src-tauri/target/release/bundle/dmg/Geist_0.7.0_aarch64.dmg`
+- `src-tauri/target/release/bundle/dmg/Geist_0.8.1_aarch64.dmg`
 
 ## How it works
 
@@ -92,6 +92,25 @@ Deliberate safety rules, each covered by a test:
   explicitly override, because newer Ghost card schemas could be lost on save. If a post
   contains an unknown Lexical node, an error boundary catches it and offers
   "Open in Ghost Admin ↗" instead of blanking the editor.
+
+v0.8.1 "Maintenance" hardens edge cases identified during wide-level code review.
+Conflict resolution preserves edits typed while the 409 collision banner is displayed;
+scrap mode intercepts window close requests to prompt and flush unsaved local edits;
+the native titlebar mirrors live save status for scraps as well as posts; promote-to-draft
+safely reuses existing drafts across retries to prevent duplicate posts on Ghost;
+forgetting a publication purges its cached drafts and scraps cleanly from disk; and
+external opener actions safely suppress unhandled rejections.
+
+v0.8.0 "Feature Complete" makes the editor resilient to losing the network. Every
+post you open is kept in a local draft cache (`draft_cache.json` via
+`tauri-plugin-store`, scoped per publication) so it can be reopened and edited while
+offline, with a banner showing when the cached copy was taken. When a save fails
+because Ghost cannot be reached, the single-flight saver keeps your edits, reports
+`status: "offline"`, and writes the still-unsaved patch to the cache instead of
+discarding it. On reconnect the app replays any dirty patches automatically; a `409`
+still halts the saver rather than clobbering the server copy. This milestone completes
+the feature set — the next milestone is `v1.0.0-rc.1` (Release Candidate), covering
+Apple code signing, notarization, the auto-updater and packaging.
 
 v0.7.0 "Scraps" adds a local-first private scratchpad. A scrap is a note that lives
 only on this Mac: it is written to `scraps.json` through `tauri-plugin-store`, keyed per

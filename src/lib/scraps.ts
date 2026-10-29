@@ -1,5 +1,5 @@
 import {LazyStore} from "@tauri-apps/plugin-store";
-import {createPost} from "./api";
+import {GhostError, createPost, fetchPost} from "./api";
 import type {PostDetail, Site} from "./api";
 import {deletePost} from "./posts";
 import {extractLexicalPlainText} from "./revisions";
@@ -449,6 +449,30 @@ export async function promoteScrapToDraft(
 		throw new Error(`Scrap not found: ${scrapId}`);
 	}
 
+	const deleteScrapAfter = options?.deleteScrapAfter ?? true;
+
+	// Idempotent retry: a previous promote may have created the draft but
+	// failed before the scrap was removed/linked. Reuse that post instead of
+	// creating a duplicate on the next attempt.
+	if (scrap.promotedPostId) {
+		try {
+			const existing = await fetchPost(site, scrap.promotedPostId);
+			if (existing) {
+				if (deleteScrapAfter) {
+					await deleteScrap(site.base, scrapId);
+				}
+				return existing;
+			}
+		} catch (err) {
+			// A 404 means the linked draft was deleted, so it is safe to create
+			// a fresh one. Any other failure (offline, auth, server error) must
+			// surface instead of risking a duplicate post.
+			if (!(err instanceof GhostError && err.status === 404)) {
+				throw err;
+			}
+		}
+	}
+
 	const post = await createPost(site, {
 		title: scrap.title,
 		lexical: scrap.lexical,
@@ -460,7 +484,7 @@ export async function promoteScrapToDraft(
 	// instead of leaving the writer with an unlinked orphan.
 	await updateScrap(site.base, scrapId, {promotedPostId: post.id});
 
-	if (options?.deleteScrapAfter ?? true) {
+	if (deleteScrapAfter) {
 		await deleteScrap(site.base, scrapId);
 	}
 
@@ -493,6 +517,30 @@ export async function demoteDraftToScrap(
 	await deletePost(site, post.id);
 
 	return scrap;
+}
+
+/**
+ * Removes every scrap for a publication, both from the in-memory mirror and
+ * the on-disk store. Used when a site is forgotten so its local notes and any
+ * stale state do not linger.
+ */
+export async function clearSiteScraps(siteBase: string): Promise<void> {
+	return runExclusive(siteBase, async () => {
+		const key = storageKey(siteBase);
+		memoryStore.set(key, []);
+
+		const store = getStore();
+		if (!store) {
+			return;
+		}
+
+		try {
+			await store.delete(key);
+			await store.save();
+		} catch {
+			/* The in-memory mirror is already empty for this session. */
+		}
+	});
 }
 
 /**

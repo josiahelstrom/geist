@@ -1,13 +1,64 @@
 import {GhostError, api} from "./api";
 
-export type SaveStatus = "clean" | "dirty" | "saving" | "saved" | "conflict" | "error";
+export type SaveStatus =
+	| "clean"
+	| "dirty"
+	| "saving"
+	| "saved"
+	| "conflict"
+	| "error"
+	| "offline";
 
 type Patch = Record<string, unknown>;
 
 type SaverOptions = {
 	onStatus: (status: SaveStatus, message?: string) => void;
 	onConflict: () => void;
+	/**
+	 * Called when a save fails because the network is unavailable. The patch
+	 * passed in is everything still unsaved (the failed patch merged with any
+	 * later edits), so callers can persist it locally and replay it later.
+	 */
+	onOfflineSave?: (patch: Patch) => Promise<void> | void;
+	/** Called after every successful PUT with the response's `updated_at`. */
+	onSaveSuccess?: (updatedAt: string, patch: Patch) => void;
 };
+
+/**
+ * True for failures that mean "the request never reached Ghost" (offline,
+ * DNS, refused connection, timeout), as opposed to an HTTP response such as a
+ * 409 conflict or a 5xx from the server.
+ */
+export function isNetworkError(err: unknown): boolean {
+	if (err instanceof GhostError) {
+		return false;
+	}
+	if (typeof navigator !== "undefined" && navigator.onLine === false) {
+		return true;
+	}
+	if (err instanceof TypeError) {
+		return true;
+	}
+	if (typeof err === "object" && err !== null) {
+		const name = (err as {name?: unknown}).name;
+		if (
+			name === "TypeError" ||
+			name === "NetworkError" ||
+			name === "AbortError" ||
+			name === "TimeoutError"
+		) {
+			return true;
+		}
+	}
+	const message = err instanceof Error ? err.message : String(err);
+	// Tauri's HTTP plugin surfaces transport failures through reqwest, whose
+	// messages differ from the browser's ("Failed to fetch"). Match those too:
+	// `error sending request for url (...)`, `dns error: ...`, and the
+	// underlying socket errors ("connection reset", "broken pipe", ...).
+	return /failed to fetch|network|offline|timed? ?out|load failed|error sending request for url|dns error|broken pipe|connection reset|connection refused|connection/i.test(
+		message,
+	);
+}
 
 /**
  * Single-flight saver.
@@ -25,7 +76,7 @@ export function createSaver(
 	site: import("./api").Site,
 	postId: string,
 	initialUpdatedAt: string,
-	{onStatus, onConflict}: SaverOptions,
+	{onStatus, onConflict, onOfflineSave, onSaveSuccess}: SaverOptions,
 ) {
 	let updatedAt = initialUpdatedAt;
 	let pending: Patch | null = null;
@@ -55,6 +106,11 @@ export function createSaver(
 				);
 				updatedAt = res.posts[0].updated_at;
 				lastError = null;
+				try {
+					onSaveSuccess?.(updatedAt, patch);
+				} catch {
+					/* Cache bookkeeping must never break the saver. */
+				}
 				if (!pending) {
 					onStatus("saved");
 				}
@@ -62,10 +118,24 @@ export function createSaver(
 				lastError = err;
 				// Keep the edits so a later save can retry them.
 				pending = {...patch, ...(pending ?? {})};
+				// Rule 4.4: a 409 is a server response, not a network failure.
+				// It must still halt immediately so the server copy is never
+				// clobbered. Only network failures are given the offline path.
 				if (err instanceof GhostError && err.status === 409) {
 					stopped = true;
 					onStatus("conflict");
 					onConflict();
+				} else if (isNetworkError(err)) {
+					const message =
+						err instanceof Error ? err.message : String(err);
+					onStatus("offline", message);
+					if (onOfflineSave) {
+						try {
+							await onOfflineSave({...pending});
+						} catch {
+							/* The in-memory patch is still kept for a retry. */
+						}
+					}
 				} else {
 					onStatus("error", err instanceof Error ? err.message : String(err));
 				}
@@ -100,6 +170,14 @@ export function createSaver(
 		/** Queue a patch. `revision: true` means "make a revision", as Cmd+S does. */
 		queue(patch: Patch, revision = false) {
 			if (stopped) {
+				// After a 409 the saver is halted, but an explicit queue is
+				// deliberate: keep the patch so "Keep my edits & overwrite"
+				// can send everything typed while the conflict banner was up.
+				// Do not start a save or change status while halted.
+				pending = {...pending, ...patch};
+				if (revision) {
+					pendingRevision = true;
+				}
 				return Promise.resolve();
 			}
 			pending = {...pending, ...patch};
@@ -112,6 +190,11 @@ export function createSaver(
 
 		/** Debounced queue, used for typing. */
 		queueDebounced(patch: Patch, delayMs = 1500) {
+			// After a 409 the saver is halted; a keystroke must not flip the
+			// status back to "unsaved" or schedule a save that will never run.
+			if (stopped) {
+				return;
+			}
 			pending = {...pending, ...patch};
 			onStatus("dirty");
 			if (debounce) {

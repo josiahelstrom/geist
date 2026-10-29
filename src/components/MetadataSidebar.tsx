@@ -791,7 +791,11 @@ export default function MetadataSidebar({
 					<button
 						type="button"
 						className="inspector-secondary-button inspector-footer-button"
-						onClick={() => openPostInAdmin(postId, site)}
+						onClick={() => {
+							void openPostInAdmin(postId, site).catch(() => {
+								/* The opener plugin is unavailable outside Tauri. */
+							});
+						}}
 					>
 						Open in Ghost Admin ↗
 					</button>
