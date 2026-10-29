@@ -137,9 +137,9 @@ the cdhash on every rebuild and breaks the Keychain ACL.
 | Version | Status | Scope |
 |---|---|---|
 | `v0.1.0` – `v0.4.0` | **Shipped** | Core editor, metadata sidebar, cards parity, theming, publishing/scheduling modal, newsletter safety gate, post visibility/tiers, revisions drawer |
-| `v0.5.0 Native` | **Active** | Full macOS design system, 3-pane rail, borderless canvas, Koenig retheme |
-| `v0.6.0 Auth` | Planned | Password login in Rust, session cookie, 2FA verification code, Staff Access Token auto-retrieval, token rotation |
-| `v0.7.0 Scraps` | Planned | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
+| `v0.5.0 Native` | **Shipped** | Full macOS design system, 3-pane rail, borderless canvas, Koenig retheme |
+| `v0.6.0 Auth` | **Shipped** | Password login in Rust, session cookie, 2FA verification code, Staff Access Token auto-retrieval, token rotation |
+| `v0.7.0 Scraps` | **Next Up** | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
 | `v0.8.0 Feature Complete` | Planned | Offline draft cache, local autosave queue, edge-case hardening |
 | `v1.0.0-rc.1 Release Candidate` | Planned | Apple code signing & notarization, `tauri-plugin-updater` with GitHub Releases, DMG & Windows installers |
 | `v1.0.0 General Availability` | Planned | First official public release |
@@ -156,12 +156,12 @@ system/dark/light, `MIN_GHOST`/`MAX_GHOST` policy.
 v0.4: publish & schedule modal, guarded newsletter sending, post visibility and paid tiers,
 revisions drawer with restore.
 
-**v0.5.0 Native (active).** Native macOS design system per `docs/design-system.md`: real
+**v0.5.0 Native (shipped).** Native macOS design system per `docs/design-system.md`: real
 vibrancy shell, native menu bar wiring, three-pane layout (rail / list / inspector),
 borderless distraction-free editor canvas, and a Koenig typography and dark-mode retheme
 driven entirely by CSS tokens.
 
-**v0.6.0 Auth.** Password login executed in Rust: `POST /session/` with the site's own
+**v0.6.0 Auth (shipped).** Password login executed in Rust: `POST /session/` with the site's own
 `Origin`, session cookie held in Rust only, 2FA verification via `PUT /session/verify/`,
 automatic Staff Access Token retrieval via `GET /users/me/token/`, and token rotation. The
 password is never persisted; the cookie is discarded once a token is obtained.

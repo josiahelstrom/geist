@@ -2,10 +2,12 @@ import {beforeEach, describe, expect, it, vi} from "vitest";
 
 const calls: {cmd: string; args: unknown}[] = [];
 
+let invokeResult: unknown = "minted-jwt";
+
 vi.mock("@tauri-apps/api/core", () => ({
 	invoke: (cmd: string, args: unknown) => {
 		calls.push({cmd, args});
-		return Promise.resolve("minted-jwt");
+		return Promise.resolve(invokeResult);
 	},
 }));
 
@@ -41,10 +43,15 @@ import {
 	api,
 	GhostError,
 	connect,
+	fetchSite,
+	loginWithPassword,
 	normalizeBase,
 	fetchPost,
 	listSiteTiers,
 	listActiveNewsletters,
+	resend2faCode,
+	rotateStaffToken,
+	verify2faCode,
 	type Site,
 } from "./api";
 
@@ -61,6 +68,7 @@ const SITE: Site = {
 beforeEach(() => {
 	calls.length = 0;
 	fetchCalls.length = 0;
+	invokeResult = "minted-jwt";
 	currentResponse = jsonResponse(200, {});
 });
 
@@ -309,6 +317,141 @@ describe("connect", () => {
 		await expect(connect("example.com", "abc:deadbeef")).rejects.toThrow(
 			/Couldn't find a Ghost site/,
 		);
+	});
+});
+
+describe("password auth commands", () => {
+	it("loginWithPassword forwards the credentials once", async () => {
+		invokeResult = {
+			status: "Success",
+			key_kind: "staff",
+			staff_id: "staff-1",
+		};
+		const result = await loginWithPassword(
+			"https://everywayhuman.com",
+			"josiah@example.com",
+			"hunter2",
+		);
+		expect(result).toEqual({
+			status: "Success",
+			key_kind: "staff",
+			staff_id: "staff-1",
+		});
+		expect(calls).toEqual([
+			{
+				cmd: "login_with_password",
+				args: {
+					url: "https://everywayhuman.com",
+					email: "josiah@example.com",
+					password: "hunter2",
+				},
+			},
+		]);
+	});
+
+	it("returns a pending 2FA challenge", async () => {
+		invokeResult = {
+			status: "Needs2FA",
+			pending_id: "pending-1",
+			email: "josiah@example.com",
+			message: "We emailed a verification code.",
+		};
+		const result = await loginWithPassword(
+			"everywayhuman.com",
+			"josiah@example.com",
+			"hunter2",
+		);
+		expect(result.status).toBe("Needs2FA");
+	});
+
+	it("verify2faCode sends the pending id and code", async () => {
+		invokeResult = {
+			status: "Success",
+			key_kind: "staff",
+			staff_id: "staff-1",
+		};
+		await verify2faCode("pending-1", "123456");
+		expect(calls[0]).toEqual({
+			cmd: "verify_2fa_code",
+			args: {pendingId: "pending-1", code: "123456"},
+		});
+	});
+
+	it("resend2faCode resolves without a value", async () => {
+		invokeResult = null;
+		await expect(resend2faCode("pending-1")).resolves.toBeUndefined();
+		expect(calls[0]).toEqual({
+			cmd: "resend_2fa_code",
+			args: {pendingId: "pending-1"},
+		});
+	});
+
+	it("rotateStaffToken returns the new token id", async () => {
+		invokeResult = "staff-2";
+		await expect(
+			rotateStaffToken("https://everywayhuman.com", 42),
+		).resolves.toBe("staff-2");
+		expect(calls[0]).toEqual({
+			cmd: "rotate_staff_token",
+			args: {base: "https://everywayhuman.com", clockOffset: 42},
+		});
+	});
+});
+
+describe("fetchSite", () => {
+	beforeEach(() => {
+		probeResponse = {
+			ok: true,
+			status: 200,
+			url: "https://everywayhuman.com/ghost/api/admin/site/",
+			headers: new Headers({
+				date: new Date(Date.now() + 60_000).toUTCString(),
+			}),
+			json: async () => ({
+				site: {
+					title: "every way human",
+					url: "https://everywayhuman.com/",
+					version: "6.68",
+				},
+			}),
+		} as unknown as Response;
+		currentResponse = jsonResponse(200, {
+			users: [{name: "Josiah", roles: [{name: "Owner"}]}],
+		});
+	});
+
+	it("resolves site metadata without saving a key", async () => {
+		const site = await fetchSite({
+			url: "everywayhuman.com",
+			keyKind: "staff",
+		});
+		expect(site.base).toBe("https://everywayhuman.com");
+		expect(site.title).toBe("every way human");
+		expect(site.version).toBe("6.68");
+		expect(site.keyKind).toBe("staff");
+		expect(site.role).toBe("Owner");
+		expect(calls.map(c => c.cmd)).not.toContain("save_key");
+	});
+
+	it("honors explicit title and role overrides without probing /users/me/", async () => {
+		const site = await fetchSite({
+			title: "My publication",
+			url: "everywayhuman.com",
+			role: "Editor",
+			keyKind: "staff",
+		});
+		expect(site.title).toBe("My publication");
+		expect(site.role).toBe("Editor");
+		expect(fetchCalls).toHaveLength(1);
+	});
+
+	it("keeps going when the role lookup fails", async () => {
+		currentResponse = jsonResponse(403, {
+			errors: [{code: "NO_PERMISSION", message: "nope"}],
+		});
+		const site = await fetchSite({url: "everywayhuman.com"});
+		expect(site.base).toBe("https://everywayhuman.com");
+		expect(site.role).toBeUndefined();
 	});
 });
 

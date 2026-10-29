@@ -3,6 +3,20 @@ import {invoke} from "@tauri-apps/api/core";
 
 export type KeyKind = "staff" | "integration";
 
+/**
+ * Result of a password sign-in. Ghost either returns a stored Staff Access
+ * Token straight away (`Success`) or emails a verification code and asks for
+ * it (`Needs2FA`). Passwords are never part of this value.
+ */
+export type LoginResult =
+	| {status: "Success"; key_kind: string; staff_id: string}
+	| {
+			status: "Needs2FA";
+			pending_id: string;
+			email: string;
+			message: string;
+	  };
+
 export type Site = {
 	/** Admin base: scheme + host + optional subdirectory, no trailing slash. */
 	base: string;
@@ -178,9 +192,20 @@ export function normalizeBase(input: string): string {
 		.replace(/\/+$/, "");
 }
 
-export async function connect(input: string, key: string): Promise<Site> {
-	// Redirects are followed here on purpose: this probe discovers the real
-	// admin address so later calls can use maxRedirections: 0.
+type SiteProbe = {
+	base: string;
+	siteUrl: string;
+	title: string;
+	version: string;
+	clockOffset: number;
+};
+
+/**
+ * Reads a site's public Admin API metadata. Redirects are followed here on
+ * purpose: this probe discovers the real admin address so later calls can use
+ * `maxRedirections: 0`.
+ */
+async function probeSite(input: string): Promise<SiteProbe> {
 	const probe = await fetch(
 		`${normalizeBase(input)}/ghost/api/admin/site/`,
 		{
@@ -191,7 +216,6 @@ export async function connect(input: string, key: string): Promise<Site> {
 		throw new Error(`Couldn't find a Ghost site there (HTTP ${probe.status})`);
 	}
 
-	const base = probe.url.replace(/\/ghost\/api\/admin\/site\/?$/, "");
 	const {site} = await probe.json();
 
 	// Rule (plan §13): measure clock skew from the server's Date header so a
@@ -202,15 +226,27 @@ export async function connect(input: string, key: string): Promise<Site> {
 		? Math.round(serverNow - Date.now() / 1000)
 		: 0;
 
-	await invoke("save_key", {base, key});
-
-	const result: Site = {
-		base,
+	return {
+		base: probe.url.replace(/\/ghost\/api\/admin\/site\/?$/, ""),
 		siteUrl: site.url,
 		title: site.title,
 		version: site.version,
-		keyKind: "staff",
 		clockOffset,
+	};
+}
+
+export async function connect(input: string, key: string): Promise<Site> {
+	const probe = await probeSite(input);
+
+	await invoke("save_key", {base: probe.base, key});
+
+	const result: Site = {
+		base: probe.base,
+		siteUrl: probe.siteUrl,
+		title: probe.title,
+		version: probe.version,
+		keyKind: "staff",
+		clockOffset: probe.clockOffset,
 	};
 
 	try {
@@ -225,12 +261,90 @@ export async function connect(input: string, key: string): Promise<Site> {
 		if (e instanceof GhostError && e.status === 404) {
 			result.keyKind = "integration";
 		} else {
-			await invoke("delete_key", {base});
+			await invoke("delete_key", {base: probe.base});
 			throw e;
 		}
 	}
 
 	return result;
+}
+
+export type FetchSiteInput = {
+	/** Optional title override; otherwise the site's own title is used. */
+	title?: string;
+	/** Public site address (or admin address); normalized before probing. */
+	url: string;
+	/** Optional role override; otherwise resolved from /users/me/. */
+	role?: string;
+	keyKind?: KeyKind;
+};
+
+/**
+ * Resolves a connected site after a password sign-in. Unlike {@link connect},
+ * this never writes a key: the Rust login command has already stored the Staff
+ * Access Token in the Keychain.
+ */
+export async function fetchSite(input: FetchSiteInput): Promise<Site> {
+	const probe = await probeSite(input.url);
+	const result: Site = {
+		base: probe.base,
+		siteUrl: probe.siteUrl,
+		title: input.title?.trim() || probe.title,
+		version: probe.version,
+		keyKind: input.keyKind ?? "staff",
+		clockOffset: probe.clockOffset,
+	};
+
+	const role = input.role?.trim();
+	if (role) {
+		result.role = role;
+		return result;
+	}
+
+	try {
+		const me = await api<{users: {name: string; roles?: {name: string}[]}[]}>(
+			result,
+			"/users/me/?include=roles",
+		);
+		result.role = me.users?.[0]?.roles?.[0]?.name;
+	} catch {
+		// Role is optional metadata; a site can still be used without it.
+	}
+
+	return result;
+}
+
+/**
+ * Signs in with a Ghost account password. The password is passed straight to
+ * the Rust command and is never stored or logged in the webview.
+ */
+export async function loginWithPassword(
+	url: string,
+	email: string,
+	password: string,
+): Promise<LoginResult> {
+	return invoke<LoginResult>("login_with_password", {url, email, password});
+}
+
+/** Completes a pending 2FA challenge with the code Ghost emailed. */
+export async function verify2faCode(
+	pendingId: string,
+	code: string,
+): Promise<LoginResult> {
+	return invoke<LoginResult>("verify_2fa_code", {pendingId, code});
+}
+
+/** Asks Ghost to email a fresh 2FA code for a pending sign-in. */
+export async function resend2faCode(pendingId: string): Promise<void> {
+	await invoke("resend_2fa_code", {pendingId});
+}
+
+/** Rotates the stored Staff Access Token and returns its new id. */
+export async function rotateStaffToken(
+	base: string,
+	clockOffset?: number,
+): Promise<string> {
+	return invoke<string>("rotate_staff_token", {base, clockOffset});
 }
 
 export async function listPosts(

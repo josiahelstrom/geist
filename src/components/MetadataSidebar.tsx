@@ -1,6 +1,8 @@
-import {useRef, useState, type ReactNode} from "react";
+import {useEffect, useRef, useState, type ReactNode} from "react";
+import {createPortal} from "react-dom";
 import {
 	api,
+	rotateStaffToken,
 	type AuthorSummary,
 	type PostVisibility,
 	type Site,
@@ -121,7 +123,35 @@ export default function MetadataSidebar({
 	const [uploadingImage, setUploadingImage] = useState(false);
 	const [uploadError, setUploadError] = useState<string | null>(null);
 	const [deleting, setDeleting] = useState(false);
+	const [confirmingRotate, setConfirmingRotate] = useState(false);
+	const [rotating, setRotating] = useState(false);
+	const [rotateError, setRotateError] = useState<string | null>(null);
+	const [rotateNote, setRotateNote] = useState<string | null>(null);
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+	// Keep a rotation confirmation from lingering forever.
+	useEffect(() => {
+		if (!rotateNote) {
+			return;
+		}
+		const timer = window.setTimeout(() => setRotateNote(null), 4000);
+		return () => window.clearTimeout(timer);
+	}, [rotateNote]);
+
+	// Escape closes the confirmation sheet.
+	useEffect(() => {
+		if (!confirmingRotate) {
+			return;
+		}
+		function onKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape" && !rotating) {
+				setConfirmingRotate(false);
+				setRotateError(null);
+			}
+		}
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [confirmingRotate, rotating]);
 
 	const canEditAuthors = canEditAuthorsRole(site.role);
 	const canEditVisibility = canEditVisibilityRole(site.role);
@@ -311,6 +341,21 @@ export default function MetadataSidebar({
 			await onDeletePost();
 		} finally {
 			setDeleting(false);
+		}
+	}
+
+	async function handleRotateStaffToken() {
+		setRotating(true);
+		setRotateError(null);
+		setRotateNote(null);
+		try {
+			await rotateStaffToken(site.base, site.clockOffset);
+			setConfirmingRotate(false);
+			setRotateNote("Staff Access Token rotated.");
+		} catch (err) {
+			setRotateError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setRotating(false);
 		}
 	}
 
@@ -675,6 +720,56 @@ export default function MetadataSidebar({
 					/>
 				</Disclosure>
 
+				<Disclosure title="Account & security" defaultOpen={false}>
+					<div className="inspector-account">
+						<span className="inspector-account-site" title={site.siteUrl}>
+							{site.title || site.siteUrl}
+						</span>
+						<span className="inspector-account-meta">
+							{site.keyKind === "staff"
+								? "Staff account"
+								: "Integration token"}
+							{site.role ? ` · ${site.role}` : ""}
+						</span>
+					</div>
+
+					{site.keyKind === "staff" ? (
+						<>
+							<button
+								type="button"
+								className="inspector-secondary-button inspector-account-button"
+								onClick={() => {
+									setRotateError(null);
+									setRotateNote(null);
+									setConfirmingRotate(true);
+								}}
+								data-testid="rotate-staff-token-button"
+							>
+								Rotate Staff Token
+							</button>
+							<p className="inspector-hint">
+								Generates a new secret and updates Geist&apos;s Keychain
+								entry.
+							</p>
+						</>
+					) : (
+						<p className="inspector-hint">
+							Integration tokens are managed in Ghost Admin.
+						</p>
+					)}
+
+					{rotateNote && (
+						<p className="inspector-toast" role="status">
+							{rotateNote}
+						</p>
+					)}
+					{rotateError && !confirmingRotate && (
+						<p className="inspector-error" role="alert">
+							{rotateError}
+						</p>
+					)}
+				</Disclosure>
+
 				<div className="inspector-footer">
 					{onOpenRevisions && (
 						<button
@@ -704,6 +799,80 @@ export default function MetadataSidebar({
 					</button>
 				</div>
 			</div>
+			{confirmingRotate &&
+				createPortal(
+					<div
+						className="rotate-dialog-backdrop"
+						onMouseDown={event => {
+							if (event.target === event.currentTarget && !rotating) {
+								setConfirmingRotate(false);
+								setRotateError(null);
+							}
+						}}
+					>
+						<div
+							className="rotate-dialog"
+							role="dialog"
+							aria-modal="true"
+							aria-labelledby="rotate-dialog-title"
+							aria-describedby="rotate-dialog-copy"
+							data-testid="rotate-staff-token-dialog"
+						>
+							<h2
+								id="rotate-dialog-title"
+								className="rotate-dialog-title"
+							>
+								Rotate Staff Access Token?
+							</h2>
+							<p id="rotate-dialog-copy" className="rotate-dialog-copy">
+								Rotating your Staff Access Token will generate a new
+								secret and update Geist&apos;s Keychain entry. Any other
+								client using this staff token will need to be reconnected.
+								Continue?
+							</p>
+
+							{rotateError && (
+								<div className="rotate-dialog-error" role="alert">
+									{rotateError}
+								</div>
+							)}
+
+							<div className="rotate-dialog-actions">
+								<button
+									type="button"
+									className="rotate-dialog-cancel"
+									onClick={() => {
+										setConfirmingRotate(false);
+										setRotateError(null);
+									}}
+									disabled={rotating}
+								>
+									Cancel
+								</button>
+								<button
+									type="button"
+									className="rotate-dialog-confirm"
+									onClick={handleRotateStaffToken}
+									disabled={rotating}
+									data-testid="confirm-rotate-staff-token"
+								>
+									{rotating ? (
+										<>
+											<span
+												className="connect-spinner"
+												aria-hidden="true"
+											/>
+											Rotating…
+										</>
+									) : (
+										"Rotate Token"
+									)}
+								</button>
+							</div>
+						</div>
+					</div>,
+					document.body,
+				)}
 		</aside>
 	);
 }

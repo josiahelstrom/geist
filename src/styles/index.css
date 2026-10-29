@@ -2,9 +2,9 @@
  * Geist style entry point.
  *
  * tokens -> base -> chrome -> sidebar -> editor canvas -> inspector -> sheet
- * -> Koenig retheme. App.css is still imported after this file in main.tsx, so
- * rules that need to win use doubled selectors (see editor.css, inspector.css
- * and modal.css).
+ * -> connect -> Koenig retheme. App.css is still imported after this file in
+ * main.tsx, so rules that need to win use doubled selectors (see editor.css,
+ * inspector.css, modal.css and connect.css).
  */
 @import "./tokens.css";
 @import "./base.css";
@@ -13,4 +13,5 @@
 @import "./editor.css";
 @import "./inspector.css";
 @import "./modal.css";
+@import "./connect.css";
 @import "./koenig.css";

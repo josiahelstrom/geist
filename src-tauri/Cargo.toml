@@ -1,6 +1,6 @@
 [package]
 name = "geist"
-version = "0.5.0"
+version = "0.6.0"
 description = "Geist — Desktop editor for Ghost publications"
 authors = ["Josiah Elstrom"]
 edition = "2024"
@@ -29,6 +29,9 @@ hmac = "0.12"
 sha2 = "0.10"
 base64 = "0.22"
 tauri-plugin-store = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "cookies"] }
+parking_lot = "0.12"
+uuid = { version = "1", features = ["v4"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
@@ -41,7 +44,6 @@ strip = true
 
 [dev-dependencies]
 regex = "1.13.1"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros"] }
 url = "2.5.8"
 urlpattern = "0.6"
