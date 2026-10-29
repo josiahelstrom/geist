@@ -52,7 +52,7 @@ npm run tauri build
 
 The `.app` and `.dmg` land in:
 - `src-tauri/target/release/bundle/macos/Geist.app`
-- `src-tauri/target/release/bundle/dmg/Geist_0.3.0_aarch64.dmg`
+- `src-tauri/target/release/bundle/dmg/Geist_0.4.0_aarch64.dmg`
 
 ## How it works
 
@@ -64,8 +64,15 @@ through `tauri-plugin-http`, which runs in Rust and so is not subject to CORS.
 
 Deliberate safety rules, each covered by a test:
 
-- Publishing changes `status` only. A `newsletter` or `email_segment` parameter would
-  email every subscriber, so it is never sent.
+- Publishing is web-only by default. `setPostStatus` changes `status` only, with zero
+  newsletter parameters. Newsletter delivery (`publishWithNewsletter`) is sent only when
+  you explicitly choose it in the Publish modal, and it is confirmed with the newsletter
+  name, the audience segment and the active member recipient count.
+- Scheduling sets `status: "scheduled"` with a future `published_at`; unscheduling
+  returns the post to draft. Post access is set through `visibility` (`public`,
+  `members`, `paid`, `tiers`) with paid tier selection. The Post History revisions
+  drawer loads `post_revisions`, previews each saved title, excerpt and Lexical plain
+  text, and restores any revision into the editor as a new revision.
 - Saves never include `html` and never use `?source=html`; Ghost would overwrite the
   Lexical document with a lossy HTML conversion.
 - One save is in flight at a time, each carries the last `updated_at` the server sent,
@@ -82,7 +89,10 @@ Deliberate safety rules, each covered by a test:
   contains an unknown Lexical node, an error boundary catches it and offers
   "Open in Ghost Admin ↗" instead of blanking the editor.
 
-v0.3.0 closed the remaining editor gap: full `cardConfig` parity with Ghost Admin
-(`/settings/`, `/snippets/`, `/labels/`, link search/autocomplete, Unsplash and Klipy
-GIF) and full media upload parity (`/images/`, `/media/`, `/file/`, plus
-`mediaThumbnail`), with CSS token theming and dark/light mode.
+v0.4.0 completes the publishing flow: web-only publishing by default, scheduled
+publishing and unscheduling, post access with paid tiers, newsletter sending behind an
+explicit confirmation that shows the recipient count, and a Post History revisions
+drawer with restore. v0.3.0 had already closed the editor gap: full `cardConfig` parity
+with Ghost Admin (`/settings/`, `/snippets/`, `/labels/`, link search/autocomplete,
+Unsplash and Klipy GIF) and full media upload parity (`/images/`, `/media/`, `/file/`,
+plus `mediaThumbnail`), with CSS token theming and dark/light mode.

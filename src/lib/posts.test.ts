@@ -43,7 +43,13 @@ const {
 	fetchEmbed,
 	canPublishRole,
 	canEditAuthorsRole,
+	canEditVisibilityRole,
 	serializeTagsForSave,
+	serializeTiersForSave,
+	buildNewsletterQuery,
+	publishWithNewsletter,
+	schedulePost,
+	unschedulePost,
 	filterPosts,
 } = await import("./posts");
 
@@ -137,6 +143,185 @@ describe("publish safety (rule 4.2)", () => {
 			/HTTP 403/,
 		);
 		responder = () => ({posts: [{status: "published", updated_at: "T2"}]});
+	});
+});
+
+describe("newsletter publish, scheduling & visibility (v0.4)", () => {
+	it("allows visibility edits for everyone but Contributors and Authors", () => {
+		expect(canEditVisibilityRole("Contributor")).toBe(false);
+		expect(canEditVisibilityRole("Author")).toBe(false);
+		expect(canEditVisibilityRole("Editor")).toBe(true);
+		expect(canEditVisibilityRole("Administrator")).toBe(true);
+		expect(canEditVisibilityRole("Owner")).toBe(true);
+		expect(canEditVisibilityRole(undefined)).toBe(true);
+	});
+
+	it("serializes tiers by trimmed, deduplicated id", () => {
+		expect(
+			serializeTiersForSave([
+				{id: "t1"},
+				{id: "  t1  "},
+				{id: ""},
+				{},
+				{id: "t2"},
+			]),
+		).toEqual([{id: "t1"}, {id: "t2"}]);
+	});
+
+	it("builds no query when no newsletter is selected", () => {
+		expect(buildNewsletterQuery()).toBe("");
+		expect(buildNewsletterQuery("")).toBe("");
+		expect(buildNewsletterQuery("   ")).toBe("");
+	});
+
+	it("builds the newsletter query and omits the all segment", () => {
+		expect(buildNewsletterQuery("weekly")).toBe("?newsletter=weekly");
+		expect(buildNewsletterQuery("weekly", "all")).toBe("?newsletter=weekly");
+		expect(buildNewsletterQuery("weekly", "status:free")).toBe(
+			"?newsletter=weekly&email_segment=status%3Afree",
+		);
+		expect(buildNewsletterQuery("weekly", "status:-free")).toBe(
+			"?newsletter=weekly&email_segment=status%3A-free",
+		);
+		expect(buildNewsletterQuery("a b", "status:free")).toBe(
+			"?newsletter=a%20b&email_segment=status%3Afree",
+		);
+	});
+
+	it("publishes with a newsletter and confirmed recipient count", async () => {
+		requests.length = 0;
+		responder = () => ({
+			posts: [{status: "published", updated_at: "T9"}],
+		});
+		const result = await publishWithNewsletter(SITE, "p1", "T1", {
+			newsletterSlug: "weekly",
+			emailSegment: "status:free",
+			confirmedRecipientCount: 120,
+		});
+		expect(requests[0].init.method).toBe("PUT");
+		expect(requests[0].url).toBe(
+			"https://everywayhuman.com/ghost/api/admin/posts/p1/?newsletter=weekly&email_segment=status%3Afree",
+		);
+		expect(body().posts).toEqual([
+			{status: "published", updated_at: "T1"},
+		]);
+		expect(result.status).toBe("published");
+		responder = () => ({posts: [{status: "published", updated_at: "T2"}]});
+	});
+
+	it("adds email_only when publishing email-only", async () => {
+		requests.length = 0;
+		await publishWithNewsletter(SITE, "p2", "T1", {
+			newsletterSlug: "weekly",
+			emailOnly: true,
+			confirmedRecipientCount: 0,
+		});
+		expect(requests[0].url).toBe(
+			"https://everywayhuman.com/ghost/api/admin/posts/p2/?newsletter=weekly",
+		);
+		expect(body().posts).toEqual([
+			{status: "published", email_only: true, updated_at: "T1"},
+		]);
+	});
+
+	it("refuses to publish without a newsletter or a confirmed count", async () => {
+		requests.length = 0;
+		await expect(
+			publishWithNewsletter(SITE, "p1", "T1", {
+				newsletterSlug: "   ",
+				confirmedRecipientCount: 1,
+			}),
+		).rejects.toThrow(/newsletter/i);
+		await expect(
+			publishWithNewsletter(SITE, "p1", "T1", {
+				newsletterSlug: "weekly",
+				confirmedRecipientCount: -1,
+			}),
+		).rejects.toThrow(/recipient count/i);
+		await expect(
+			publishWithNewsletter(SITE, "p1", "T1", {
+				newsletterSlug: "weekly",
+				confirmedRecipientCount: 1.5,
+			}),
+		).rejects.toThrow(/recipient count/i);
+		expect(requests).toHaveLength(0);
+	});
+
+	it("schedules a post in the future", async () => {
+		requests.length = 0;
+		const when = new Date(Date.now() + 86_400_000);
+		const result = await schedulePost(SITE, "p1", "T1", {
+			publishedAt: when.toISOString(),
+			newsletterSlug: "weekly",
+			emailSegment: "status:-free",
+		});
+		expect(requests[0].init.method).toBe("PUT");
+		expect(requests[0].url).toBe(
+			"https://everywayhuman.com/ghost/api/admin/posts/p1/?newsletter=weekly&email_segment=status%3A-free",
+		);
+		expect(body().posts).toEqual([
+			{
+				status: "scheduled",
+				published_at: when.toISOString(),
+				updated_at: "T1",
+			},
+		]);
+		expect(result.status).toBe("published");
+	});
+
+	it("adds email_only for email-only schedules", async () => {
+		requests.length = 0;
+		const when = new Date(Date.now() + 86_400_000).toISOString();
+		await schedulePost(SITE, "p1", "T1", {
+			publishedAt: when,
+			newsletterSlug: "weekly",
+			emailOnly: true,
+		});
+		expect(body().posts).toEqual([
+			{
+				status: "scheduled",
+				published_at: when,
+				email_only: true,
+				updated_at: "T1",
+			},
+		]);
+	});
+
+	it("rejects invalid and past dates, and email-only without a newsletter", async () => {
+		requests.length = 0;
+		await expect(
+			schedulePost(SITE, "p1", "T1", {publishedAt: "not-a-date"}),
+		).rejects.toThrow(/valid publish date/i);
+		await expect(
+			schedulePost(SITE, "p1", "T1", {
+				publishedAt: new Date(Date.now() - 60_000).toISOString(),
+			}),
+		).rejects.toThrow(/future/i);
+		await expect(
+			schedulePost(SITE, "p1", "T1", {
+				publishedAt: new Date(Date.now() + 86_400_000).toISOString(),
+				emailOnly: true,
+			}),
+		).rejects.toThrow(/newsletter/i);
+		expect(requests).toHaveLength(0);
+	});
+
+	it("unschedules a post back to draft", async () => {
+		requests.length = 0;
+		const result = await unschedulePost(SITE, "p1", "T1");
+		expect(requests[0].init.method).toBe("PUT");
+		expect(requests[0].url).toBe(
+			"https://everywayhuman.com/ghost/api/admin/posts/p1/",
+		);
+		expect(body().posts).toEqual([
+			{
+				status: "draft",
+				published_at: null,
+				email_only: false,
+				updated_at: "T1",
+			},
+		]);
+		expect(result.status).toBe("published");
 	});
 });
 

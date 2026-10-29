@@ -817,7 +817,7 @@ cargo add hmac@0.12 sha2@0.10 base64@0.22 hex serde_json
 
 ---
 
-## 18. Handoff status (Geist v0.3.0 complete → v0.4.0 next)
+## 18. Handoff status (Geist v0.4.0 complete → v0.5.0 next)
 
 - **Project path**: `/Users/josiahelstrom/Documents/10 Projects/14 Coding/geist` (renamed from `draftdesk`).
 - **App / Bundle ID**: `Geist` / `app.geist.desktop` (Keychain service `app.geist` with fallback migration from `app.draftdesk`).
@@ -835,7 +835,13 @@ cargo add hmac@0.12 sha2@0.10 base64@0.22 hex serde_json
   - CSS token theming with system/dark/light mode (`src/lib/theme.ts`) plus GPU transform compositing for smoother scrolling.
   - `MIN_GHOST` / `MAX_GHOST` compatibility policy (`src/lib/version.ts`): `5.0`–`6.68` editable, older shows a warning banner, newer is enforced read-only with an explicit per-site override, and an undetectable version stays editable but carries a warning banner.
   - Test suite: 114 frontend tests (`npm run check`, 9 files) + 19 Rust tests + 5 live e2e tests.
+- **v0.4.0 completed**:
+  - Publish & Schedule modal (`src/components/PublishModal.tsx`, `src/lib/posts.ts`): web-only publish (default), scheduled publishing (`status: "scheduled"` + future ISO `published_at`) and unscheduling back to draft, and guarded newsletter sending (`?newsletter=<slug>&email_segment=<segment>` + optional `email_only: true`) gated behind an explicit confirmation showing the active member count (`GET /newsletters/?filter=status:active&include=count.active_members`).
+  - Post access & paid tiers (`src/components/MetadataSidebar.tsx`): `visibility` (`public`, `members`, `paid`, `tiers`) with role guard (`canEditVisibilityRole`) and paid tier selection (`GET /tiers/`).
+  - Revisions drawer & restore (`src/components/RevisionsDrawer.tsx`, `src/lib/revisions.ts`): loads `post_revisions` and `post_revisions.author`, previews historical title/excerpt/Lexical plain text, and restores any revision into the editor with a new revision save.
 
-### Next up for v0.4.0
-1. Exercise the remaining React ↔ Tauri glue (§16.6) end to end in the packaged app, so `invoke` and `plugin-http` calls are covered by something other than manual clicking.
-2. Re-audit card coverage against the Ghost version `TESTED_GHOST` points at and raise `MAX_GHOST` once a newer Koenig build is promoted.
+### Next up for v0.5.0
+Password login (§5.4 in Rust): a session cookie obtained from `POST /session/` with the
+site's own `Origin`, 2FA verification code handling (`PUT /session/verify/`), and
+automatic Staff Access Token retrieval (`GET /users/me/token/`) so the user never has to
+paste a key.

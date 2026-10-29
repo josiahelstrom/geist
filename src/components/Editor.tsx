@@ -6,12 +6,17 @@ import "@tryghost/koenig-lexical/style.css";
 import {
 	GhostError,
 	fetchPost,
+	listActiveNewsletters,
 	listSiteAuthors,
 	listSiteTags,
+	listSiteTiers,
 	type AuthorSummary,
+	type NewsletterSummary,
 	type PostDetail,
+	type PostRevision,
 	type Site,
 	type TagSummary,
+	type TierSummary,
 } from "../lib/api";
 import {createSaver, type SaveStatus} from "../lib/saver";
 import {createChangeFilter} from "../lib/changeFilter";
@@ -31,12 +36,18 @@ import {
 	openInAppPreview,
 	openPostInAdmin,
 	previewUrl,
+	publishWithNewsletter,
+	schedulePost,
 	setPostStatus,
+	unschedulePost,
 	type PreviewMemberStatus,
 } from "../lib/posts";
+import {buildRestorePatch} from "../lib/revisions";
 import {versionBanner, shouldEnforceReadOnly} from "../lib/version";
 import EditorErrorBoundary from "./EditorErrorBoundary";
 import MetadataSidebar, {type PostMetadataState} from "./MetadataSidebar";
+import PublishModal, {type PublishAction} from "./PublishModal";
+import RevisionsDrawer from "./RevisionsDrawer";
 import ThemeToggle from "./ThemeToggle";
 
 type Props = {
@@ -63,6 +74,8 @@ function metaFromPost(p: PostDetail): PostMetadataState {
 		featureImageAlt: p.feature_image_alt ?? "",
 		featureImageCaption: p.feature_image_caption ?? "",
 		featured: Boolean(p.featured),
+		visibility: p.visibility ?? "public",
+		tiers: (p.tiers ?? []).filter(t => t.type === "paid"),
 		tags: p.tags ?? [],
 		authors: p.authors ?? [],
 	};
@@ -79,12 +92,19 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		featureImageAlt: "",
 		featureImageCaption: "",
 		featured: false,
+		visibility: "public",
+		tiers: [],
 		tags: [],
 		authors: [],
 	});
 	const [siteTags, setSiteTags] = useState<TagSummary[]>([]);
 	const [siteAuthors, setSiteAuthors] = useState<AuthorSummary[]>([]);
-	const [sidebarOpen, setSidebarOpen] = useState(false);
+	const [siteTiers, setSiteTiers] = useState<TierSummary[]>([]);
+	const [newsletters, setNewsletters] = useState<NewsletterSummary[]>([]);
+	const [drawer, setDrawer] = useState<"none" | "settings" | "revisions">(
+		"none",
+	);
+	const [publishModalOpen, setPublishModalOpen] = useState(false);
 	const [previewMode, setPreviewMode] =
 		useState<PreviewMemberStatus>("default");
 
@@ -104,6 +124,11 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	const saverRef = useRef<ReturnType<typeof createSaver> | null>(null);
 	const changeFilterRef = useRef(createChangeFilter());
 	const editorErrorRef = useRef(false);
+	const activePostIdRef = useRef(postId);
+
+	useEffect(() => {
+		activePostIdRef.current = postId;
+	}, [postId]);
 
 	// Computed synchronously so the guard is correct on the very first render
 	// (stable callbacks read it through the ref).
@@ -185,6 +210,16 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 				setSiteAuthors(authors);
 			}
 		});
+		listSiteTiers(site).then(tiers => {
+			if (!cancelled) {
+				setSiteTiers(tiers);
+			}
+		});
+		listActiveNewsletters(site).then(list => {
+			if (!cancelled) {
+				setNewsletters(list);
+			}
+		});
 
 		return () => {
 			cancelled = true;
@@ -196,6 +231,29 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 			listSnippets(site).then(setSnippets);
 		}
 	}, [site]);
+
+	// Background revision refreshes must never clobber the post's updated_at or
+	// race with in-flight edits, so only merge the revision list and only for
+	// the post that is still active.
+	const refreshRevisions = useCallback(
+		(targetId: string) => {
+			fetchPost(site, targetId)
+				.then(fresh => {
+					if (activePostIdRef.current !== targetId) {
+						return;
+					}
+					setPost(prev =>
+						prev && prev.id === targetId
+							? {...prev, post_revisions: fresh.post_revisions}
+							: prev,
+					);
+				})
+				.catch(() => {
+					/* Revision refresh is best-effort; the save status already shows errors. */
+				});
+		},
+		[site],
+	);
 
 	// Card-config data arrives after the editor mounts; cardConfig only lives
 	// in Koenig's context, so updating it does not remount the editor.
@@ -227,13 +285,13 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 			...buildCardConfig(site, {
 				settings,
 				snippets,
-				postVisibility: post?.visibility,
+				postVisibility: meta.visibility,
 				onSnippetsChanged: refreshSnippets,
 			}),
 			fetchEmbed: (url: string, {type}: {type: string}) =>
 				fetchEmbed(site, url, type),
 		}),
-		[site, settings, snippets, refreshSnippets, post?.visibility],
+		[site, settings, snippets, refreshSnippets, meta.visibility],
 	);
 
 	const handleBody = useCallback((state: unknown) => {
@@ -285,12 +343,14 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 				if (isReadOnlyRef.current) {
 					return;
 				}
-				saverRef.current?.flush(true);
+				saverRef.current
+					?.flush(true)
+					.then(() => refreshRevisions(postId));
 			}
 		}
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, []);
+	}, [postId, refreshRevisions]);
 
 	// Warn before closing with unsaved work.
 	useEffect(() => {
@@ -432,7 +492,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		}
 	}
 
-	async function handlePublish(nextStatus: "published" | "draft") {
+	async function handlePublish(nextStatus: "draft") {
 		if (!post || !confirmPublish(nextStatus)) {
 			return;
 		}
@@ -448,12 +508,153 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 				nextStatus,
 			);
 			saverRef.current?.adoptUpdatedAt(result.updated_at);
-			setPost({...post, status: result.status, updated_at: result.updated_at});
+			setPost(prev =>
+				prev
+					? {
+							...prev,
+							status: result.status,
+							updated_at: result.updated_at,
+						}
+					: prev,
+			);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		} finally {
 			setPublishing(false);
 		}
+	}
+
+	async function handlePublishAction(action: PublishAction) {
+		if (!post) {
+			return;
+		}
+		setPublishing(true);
+		setError(null);
+		try {
+			await saverRef.current?.flush();
+			const currentUpdatedAt =
+				saverRef.current?.updatedAt ?? post.updated_at;
+			let result: {status: string; updated_at: string};
+
+			if (action.kind === "publish-web") {
+				result = await setPostStatus(
+					site,
+					post.id,
+					currentUpdatedAt,
+					"published",
+				);
+			} else if (action.kind === "publish-email") {
+				result = await publishWithNewsletter(
+					site,
+					post.id,
+					currentUpdatedAt,
+					{
+						newsletterSlug: action.newsletterSlug,
+						emailSegment: action.emailSegment,
+						emailOnly: action.emailOnly,
+						confirmedRecipientCount:
+							action.confirmedRecipientCount,
+					},
+				);
+			} else {
+				result = await schedulePost(site, post.id, currentUpdatedAt, {
+					publishedAt: action.publishedAt,
+					newsletterSlug: action.newsletterSlug,
+					emailSegment: action.emailSegment,
+					emailOnly: action.emailOnly,
+				});
+			}
+
+			saverRef.current?.adoptUpdatedAt(result.updated_at);
+			setPublishModalOpen(false);
+
+			// Refresh while `publishing` is still true so the modal stays busy
+			// and a late save can't race the refreshed updated_at.
+			const fresh = await fetchPost(site, post.id).catch(() => null);
+			if (fresh) {
+				setPost(fresh);
+				saverRef.current?.adoptUpdatedAt(fresh.updated_at);
+			} else {
+				// Fall back to the mutation result if the refresh failed.
+				setPost(prev =>
+					prev
+						? {
+								...prev,
+								status: result.status,
+								updated_at: result.updated_at,
+							}
+						: prev,
+				);
+			}
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setPublishing(false);
+		}
+	}
+
+	async function handleUnschedule() {
+		if (!post) {
+			return;
+		}
+		const ok = window.confirm(
+			`Unschedule this post on "${site.title}" and return it to drafts?`,
+		);
+		if (!ok) {
+			return;
+		}
+		setPublishing(true);
+		setError(null);
+		try {
+			await saverRef.current?.flush();
+			const result = await unschedulePost(
+				site,
+				post.id,
+				saverRef.current?.updatedAt ?? post.updated_at,
+			);
+			saverRef.current?.adoptUpdatedAt(result.updated_at);
+			setPost(prev =>
+				prev
+					? {
+							...prev,
+							status: result.status,
+							updated_at: result.updated_at,
+							published_at: null,
+							email_only: false,
+						}
+					: prev,
+			);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setPublishing(false);
+		}
+	}
+
+	function handleRestoreRevision(revision: PostRevision) {
+		if (isReadOnlyRef.current || !post) {
+			return;
+		}
+		const patch = buildRestorePatch(revision);
+		setTitle(patch.title);
+		setLexical(patch.lexical);
+		setPost(prev => (prev ? {...prev, lexical: patch.lexical} : prev));
+		setMeta(prev => ({
+			...prev,
+			customExcerpt: patch.custom_excerpt ?? "",
+			featureImage: patch.feature_image ?? "",
+			featureImageAlt: patch.feature_image_alt ?? "",
+			featureImageCaption: patch.feature_image_caption ?? "",
+		}));
+		setEditorVersion(v => v + 1);
+		changeFilterRef.current.reset();
+		const postIdValue = post.id;
+		saverRef.current
+			?.queue(patch, true)
+			.then(() => refreshRevisions(postIdValue))
+			.catch(() => {
+				/* The saver reports failures through save status. */
+			});
 	}
 
 	async function handleDeletePost() {
@@ -475,8 +676,8 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		}
 	}
 
-	function confirmPublish(nextStatus: "published" | "draft") {
-		const action = nextStatus === "published" ? "Publish" : "Unpublish";
+	function confirmPublish(nextStatus: "draft") {
+		const action = nextStatus === "draft" ? "Unpublish" : "Publish";
 		return window.confirm(
 			`${action} this post on "${site.title}" (${site.base})?\n\n` +
 				"No newsletter or email will be sent.",
@@ -512,10 +713,11 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	}
 
 	const canPublish = canPublishRole(site.role);
+	const hasDrawer = drawer !== "none";
 	const banner = versionBanner(site.version);
 
 	return (
-		<div className={sidebarOpen ? "editor-shell with-sidebar" : "editor-shell"}>
+		<div className={hasDrawer ? "editor-shell with-sidebar" : "editor-shell"}>
 			<div className="editor">
 				<header className="editor-header">
 					<button onClick={handleBack} data-testid="back-button">
@@ -524,6 +726,12 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 					<span className="muted">
 						{site.title} · <span className={`badge badge-${post.status}`}>{post.status}</span>
 					</span>
+					{post.status === "scheduled" && post.published_at && (
+						<span className="muted small" data-testid="scheduled-hint">
+							Scheduled for{" "}
+							{new Date(post.published_at).toLocaleString()}
+						</span>
+					)}
 					<div className="spacer" />
 					<span className={`status status-${status}`} data-testid="save-status">
 						{STATUS_COPY[status]}
@@ -563,31 +771,67 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 					</div>
 
 					{canPublish &&
-						(post.status === "published" ? (
+						(post.status === "published" || post.status === "sent" ? (
 							<button
 								onClick={() => handlePublish("draft")}
 								disabled={publishing || isReadOnly}
 							>
 								Unpublish
 							</button>
+						) : post.status === "scheduled" ? (
+							<>
+								<button
+									type="button"
+									onClick={handleUnschedule}
+									disabled={publishing || isReadOnly}
+								>
+									Unschedule
+								</button>
+								<button
+									type="button"
+									onClick={() => setPublishModalOpen(true)}
+									disabled={publishing || isReadOnly}
+								>
+									Reschedule / Publish…
+								</button>
+							</>
 						) : (
 							<button
 								className="primary-button"
-								onClick={() => handlePublish("published")}
+								onClick={() => setPublishModalOpen(true)}
 								disabled={publishing || isReadOnly}
+								data-testid="open-publish-modal-button"
 							>
-								Publish
+								Publish…
 							</button>
 						))}
 
 					<button
 						type="button"
-						className={sidebarOpen ? "active-button" : ""}
-						onClick={() => setSidebarOpen(open => !open)}
+						className={drawer === "settings" ? "active-button" : ""}
+						onClick={() =>
+							setDrawer(current =>
+								current === "settings" ? "none" : "settings",
+							)
+						}
 						title="Toggle post settings sidebar"
 						data-testid="toggle-sidebar-button"
 					>
 						Settings
+					</button>
+
+					<button
+						type="button"
+						className={drawer === "revisions" ? "active-button" : ""}
+						onClick={() =>
+							setDrawer(current =>
+								current === "revisions" ? "none" : "revisions",
+							)
+						}
+						title="Toggle post history"
+						data-testid="toggle-revisions-button"
+					>
+						History
 					</button>
 				</header>
 
@@ -715,17 +959,43 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 				</p>
 			</div>
 
-			{sidebarOpen && (
+			{drawer === "settings" && (
 				<MetadataSidebar
 					site={site}
 					postId={post.id}
 					meta={meta}
 					siteTags={siteTags}
 					siteAuthors={siteAuthors}
+					siteTiers={siteTiers}
+					revisionsCount={post.post_revisions?.length ?? 0}
+					onOpenRevisions={() => setDrawer("revisions")}
 					onChange={handleMetaChange}
 					onDeletePost={handleDeletePost}
-					onClose={() => setSidebarOpen(false)}
+					onClose={() => setDrawer("none")}
 					readOnly={isReadOnly}
+				/>
+			)}
+
+			{drawer === "revisions" && (
+				<RevisionsDrawer
+					revisions={post.post_revisions ?? []}
+					readOnly={isReadOnly}
+					onRestore={handleRestoreRevision}
+					onClose={() => setDrawer("none")}
+				/>
+			)}
+
+			{publishModalOpen && (
+				<PublishModal
+					site={site}
+					postTitle={title}
+					postStatus={post.status}
+					scheduledAt={post.published_at}
+					newsletters={newsletters}
+					membersEnabled={settings.membersEnabled}
+					busy={publishing}
+					onExecute={handlePublishAction}
+					onClose={() => setPublishModalOpen(false)}
 				/>
 			)}
 		</div>

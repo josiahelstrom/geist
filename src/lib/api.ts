@@ -51,10 +51,49 @@ export type Post = {
 	authors?: AuthorSummary[];
 };
 
+export type TierSummary = {
+	id: string;
+	name: string;
+	slug: string;
+	type: "free" | "paid";
+	active: boolean;
+};
+
+export type NewsletterSummary = {
+	id: string;
+	name: string;
+	slug: string;
+	status: "active" | "archived";
+	visibility?: string;
+	count?: {active_members?: number};
+};
+
+export type PostRevision = {
+	id: string;
+	lexical: string;
+	title: string;
+	custom_excerpt?: string | null;
+	feature_image?: string | null;
+	feature_image_alt?: string | null;
+	feature_image_caption?: string | null;
+	created_at: string;
+	created_at_ts?: number;
+	post_status?: string;
+	reason?: string;
+	author?: {id: string; name: string; slug?: string} | null;
+};
+
+export type EmailSegment = "all" | "status:free" | "status:-free";
+
 export type PostDetail = Post & {
 	lexical: string;
 	feature_image_alt?: string | null;
 	feature_image_caption?: string | null;
+	tiers?: TierSummary[];
+	email_only?: boolean;
+	email_segment?: string;
+	newsletter?: {id: string; name: string; slug: string} | null;
+	post_revisions?: PostRevision[];
 };
 
 export class GhostError extends Error {
@@ -214,7 +253,7 @@ export async function listPosts(
 export async function fetchPost(site: Site, id: string): Promise<PostDetail> {
 	const res = await api<{posts: PostDetail[]}>(
 		site,
-		`/posts/${id}/?formats=lexical&include=tags,authors`,
+		`/posts/${id}/?formats=lexical&include=tags,authors,tiers,newsletter,post_revisions,post_revisions.author`,
 	);
 	return res.posts[0];
 }
@@ -238,6 +277,31 @@ export async function listSiteAuthors(site: Site): Promise<AuthorSummary[]> {
 			"/users/?limit=all&fields=id,name,slug,email",
 		);
 		return res.users ?? [];
+	} catch {
+		return [];
+	}
+}
+
+export async function listSiteTiers(site: Site): Promise<TierSummary[]> {
+	try {
+		const res = await api<{tiers: TierSummary[]}>(site, "/tiers/?limit=all");
+		return (res.tiers ?? []).filter(
+			t => t.type === "paid" && t.active !== false,
+		);
+	} catch {
+		return [];
+	}
+}
+
+export async function listActiveNewsletters(
+	site: Site,
+): Promise<NewsletterSummary[]> {
+	try {
+		const res = await api<{newsletters: NewsletterSummary[]}>(
+			site,
+			"/newsletters/?filter=status:active&include=count.active_members&limit=all",
+		);
+		return res.newsletters ?? [];
 	} catch {
 		return [];
 	}

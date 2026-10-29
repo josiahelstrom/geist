@@ -37,7 +37,16 @@ vi.mock("@tauri-apps/plugin-http", () => ({
 let currentResponse: Response = jsonResponse(200, {});
 let probeResponse: Response = jsonResponse(200, {});
 
-import {api, GhostError, connect, normalizeBase, type Site} from "./api";
+import {
+	api,
+	GhostError,
+	connect,
+	normalizeBase,
+	fetchPost,
+	listSiteTiers,
+	listActiveNewsletters,
+	type Site,
+} from "./api";
 
 const SITE: Site = {
 	base: "https://everywayhuman.com",
@@ -144,6 +153,82 @@ describe("api", () => {
 			json: async () => ({}),
 		} as unknown as Response;
 		await expect(api(SITE, "/posts/")).rejects.toThrow(/Reconnect/);
+	});
+});
+
+describe("fetchers", () => {
+	it("fetchPost asks for lexical plus tiers, newsletter, and revisions", async () => {
+		currentResponse = jsonResponse(200, {
+			posts: [
+				{
+					id: "p1",
+					uuid: "u1",
+					title: "Hello",
+					status: "draft",
+					updated_at: "T1",
+					lexical: "{}",
+				},
+			],
+		});
+		const post = await fetchPost(SITE, "p1");
+		expect(post.id).toBe("p1");
+		expect(fetchCalls[0].url).toBe(
+			"https://everywayhuman.com/ghost/api/admin/posts/p1/?formats=lexical&include=tags,authors,tiers,newsletter,post_revisions,post_revisions.author",
+		);
+		expect(fetchCalls[0].init.method).toBeUndefined();
+	});
+
+	it("listSiteTiers returns only active paid tiers", async () => {
+		currentResponse = jsonResponse(200, {
+			tiers: [
+				{id: "t1", name: "Free", slug: "free", type: "free", active: true},
+				{id: "t2", name: "Gold", slug: "gold", type: "paid", active: true},
+				{id: "t3", name: "Old", slug: "old", type: "paid", active: false},
+			],
+		});
+		const tiers = await listSiteTiers(SITE);
+		expect(fetchCalls[0].url).toBe(
+			"https://everywayhuman.com/ghost/api/admin/tiers/?limit=all",
+		);
+		expect(tiers).toEqual([
+			{id: "t2", name: "Gold", slug: "gold", type: "paid", active: true},
+		]);
+	});
+
+	it("listSiteTiers returns [] when the request fails", async () => {
+		currentResponse = jsonResponse(403, {
+			errors: [{code: "NO_PERMISSION", message: "nope"}],
+		});
+		expect(await listSiteTiers(SITE)).toEqual([]);
+	});
+
+	it("listActiveNewsletters asks for active newsletters with member counts", async () => {
+		currentResponse = jsonResponse(200, {
+			newsletters: [
+				{
+					id: "n1",
+					name: "Weekly",
+					slug: "weekly",
+					status: "active",
+					count: {active_members: 42},
+				},
+			],
+		});
+		const newsletters = await listActiveNewsletters(SITE);
+		expect(fetchCalls[0].url).toBe(
+			"https://everywayhuman.com/ghost/api/admin/newsletters/?filter=status:active&include=count.active_members&limit=all",
+		);
+		expect(newsletters[0].count?.active_members).toBe(42);
+	});
+
+	it("listActiveNewsletters returns [] when there is no field or on error", async () => {
+		currentResponse = jsonResponse(200, {});
+		expect(await listActiveNewsletters(SITE)).toEqual([]);
+
+		currentResponse = jsonResponse(500, {
+			errors: [{code: "UNKNOWN", message: "boom"}],
+		});
+		expect(await listActiveNewsletters(SITE)).toEqual([]);
 	});
 });
 

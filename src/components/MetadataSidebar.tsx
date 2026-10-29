@@ -2,15 +2,19 @@ import {useRef, useState} from "react";
 import {
 	api,
 	type AuthorSummary,
+	type PostVisibility,
 	type Site,
 	type TagSummary,
+	type TierSummary,
 } from "../lib/api";
 import {
 	MAX_EXCERPT_LENGTH,
 	MAX_FEATURE_IMAGE_ALT_LENGTH,
 	canEditAuthorsRole,
+	canEditVisibilityRole,
 	openPostInAdmin,
 	serializeTagsForSave,
+	serializeTiersForSave,
 } from "../lib/posts";
 import {urlFromUploadResponse} from "../lib/uploader";
 
@@ -21,6 +25,8 @@ export type PostMetadataState = {
 	featureImageAlt: string;
 	featureImageCaption: string;
 	featured: boolean;
+	visibility: PostVisibility;
+	tiers: TierSummary[];
 	tags: TagSummary[];
 	authors: AuthorSummary[];
 };
@@ -31,6 +37,9 @@ type Props = {
 	meta: PostMetadataState;
 	siteTags: TagSummary[];
 	siteAuthors: AuthorSummary[];
+	siteTiers: TierSummary[];
+	revisionsCount?: number;
+	onOpenRevisions?: () => void;
 	onChange: (
 		next: PostMetadataState,
 		patch: Record<string, unknown>,
@@ -47,6 +56,9 @@ export default function MetadataSidebar({
 	meta,
 	siteTags,
 	siteAuthors,
+	siteTiers,
+	revisionsCount,
+	onOpenRevisions,
 	onChange,
 	onDeletePost,
 	onClose,
@@ -60,6 +72,7 @@ export default function MetadataSidebar({
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 
 	const canEditAuthors = canEditAuthorsRole(site.role);
+	const canEditVisibility = canEditVisibilityRole(site.role);
 
 	function updateField<K extends keyof PostMetadataState>(
 		key: K,
@@ -196,6 +209,47 @@ export default function MetadataSidebar({
 		});
 	}
 
+	function handleVisibilityChange(value: string) {
+		if (readOnly || !canEditVisibility) {
+			return;
+		}
+		const next = value as PostVisibility;
+		if (next === "tiers") {
+			updateField("visibility", next, {
+				visibility: next,
+				tiers: serializeTiersForSave(meta.tiers),
+			});
+			return;
+		}
+		updateField("visibility", next, {visibility: next});
+	}
+
+	function handleAddTier(tierId: string) {
+		if (readOnly || !canEditVisibility || !tierId) {
+			return;
+		}
+		const tier = siteTiers.find(t => t.id === tierId);
+		if (!tier || meta.tiers.some(existing => existing.id === tier.id)) {
+			return;
+		}
+		const nextTiers = [...meta.tiers, tier];
+		updateField("tiers", nextTiers, {
+			visibility: "tiers",
+			tiers: serializeTiersForSave(nextTiers),
+		});
+	}
+
+	function handleRemoveTier(tierId: string) {
+		if (readOnly || !canEditVisibility) {
+			return;
+		}
+		const nextTiers = meta.tiers.filter(tier => tier.id !== tierId);
+		updateField("tiers", nextTiers, {
+			visibility: "tiers",
+			tiers: serializeTiersForSave(nextTiers),
+		});
+	}
+
 	async function handleDelete() {
 		if (readOnly) {
 			return;
@@ -210,6 +264,11 @@ export default function MetadataSidebar({
 
 	const availableAuthors = siteAuthors.filter(
 		a => !meta.authors.some(existing => existing.id === a.id),
+	);
+	const availableTiers = siteTiers.filter(
+		tier =>
+			tier.type === "paid" &&
+			!meta.tiers.some(existing => existing.id === tier.id),
 	);
 
 	return (
@@ -353,6 +412,69 @@ export default function MetadataSidebar({
 			</section>
 
 			<section className="meta-section">
+				<label className="meta-label" htmlFor="post-visibility-select">
+					Post access
+				</label>
+				<select
+					id="post-visibility-select"
+					value={meta.visibility}
+					disabled={!canEditVisibility || readOnly}
+					onChange={e => handleVisibilityChange(e.target.value)}
+					data-testid="visibility-select"
+				>
+					<option value="public">Public</option>
+					<option value="members">Members only</option>
+					<option value="paid">Paid-members only</option>
+					<option value="tiers">Specific tiers</option>
+				</select>
+				{meta.visibility === "tiers" && (
+					<>
+						{meta.tiers.length > 0 && (
+							<div className="chip-list" data-testid="post-tiers">
+								{meta.tiers.map(tier => (
+									<span key={tier.id} className="chip">
+										{tier.name}
+										<button
+											type="button"
+											className="chip-remove"
+											onClick={() => handleRemoveTier(tier.id)}
+											disabled={!canEditVisibility || readOnly}
+											aria-label={`Remove tier ${tier.name}`}
+										>
+											×
+										</button>
+									</span>
+								))}
+							</div>
+						)}
+						<select
+							value=""
+							onChange={e => handleAddTier(e.target.value)}
+							disabled={
+								!canEditVisibility ||
+								readOnly ||
+								availableTiers.length === 0
+							}
+							aria-label="Add a tier"
+							data-testid="tier-select"
+						>
+							<option value="">Add a tier…</option>
+							{availableTiers.map(tier => (
+								<option key={tier.id} value={tier.id}>
+									{tier.name}
+								</option>
+							))}
+						</select>
+					</>
+				)}
+				{!canEditVisibility && (
+					<p className="hint">
+						Your role ({site.role}) cannot change post access.
+					</p>
+				)}
+			</section>
+
+			<section className="meta-section">
 				<label className="meta-label" htmlFor="post-tag-input">
 					Tags
 				</label>
@@ -475,6 +597,15 @@ export default function MetadataSidebar({
 			</section>
 
 			<section className="meta-section meta-footer-actions">
+				{onOpenRevisions && (
+					<button
+						type="button"
+						onClick={onOpenRevisions}
+						data-testid="open-revisions-button"
+					>
+						Post history ({revisionsCount ?? 0})
+					</button>
+				)}
 				<button
 					type="button"
 					onClick={() => openPostInAdmin(postId, site)}

@@ -1,6 +1,6 @@
 [package]
 name = "geist"
-version = "0.3.0"
+version = "0.4.0"
 description = "Geist — Desktop editor for Ghost publications"
 authors = ["Josiah Elstrom"]
 edition = "2024"

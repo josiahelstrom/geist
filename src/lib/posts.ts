@@ -1,6 +1,6 @@
 import {invoke} from "@tauri-apps/api/core";
 import {GhostError, api} from "./api";
-import type {Post, Site, TagSummary} from "./api";
+import type {EmailSegment, Post, Site, TagSummary} from "./api";
 
 /** Ghost 6.68 schema validation limits (`core/server/data/schema/schema.js`). */
 export const MAX_EXCERPT_LENGTH = 300;
@@ -32,6 +32,146 @@ export async function setPostStatus(
 			method: "PUT",
 			body: JSON.stringify({
 				posts: [{status, updated_at: updatedAt}],
+			}),
+		},
+	);
+	return res.posts[0];
+}
+
+/**
+ * `newsletter` and `email_segment` are query parameters on publish in Ghost.
+ * Returns "" when no newsletter is selected so callers can interpolate safely.
+ */
+export function buildNewsletterQuery(
+	newsletterSlug?: string,
+	emailSegment?: EmailSegment,
+): string {
+	const slug = newsletterSlug?.trim();
+	if (!slug) {
+		return "";
+	}
+	let query = `?newsletter=${encodeURIComponent(slug)}`;
+	if (emailSegment && emailSegment !== "all") {
+		query += `&email_segment=${encodeURIComponent(emailSegment)}`;
+	}
+	return query;
+}
+
+/**
+ * Publishes a post and sends it as a newsletter. The caller must have already
+ * confirmed the recipient count with the user (`confirmedRecipientCount`); this
+ * is the explicit opt-in to the irreversible send that rule 4.2 protects.
+ */
+export async function publishWithNewsletter(
+	site: Site,
+	postId: string,
+	updatedAt: string,
+	options: {
+		newsletterSlug: string;
+		emailSegment?: EmailSegment;
+		emailOnly?: boolean;
+		confirmedRecipientCount: number;
+	},
+) {
+	const slug = options.newsletterSlug?.trim();
+	if (!slug) {
+		throw new Error("Choose a newsletter before publishing.");
+	}
+	if (
+		!Number.isInteger(options.confirmedRecipientCount) ||
+		options.confirmedRecipientCount < 0
+	) {
+		throw new Error("Confirm the recipient count before publishing.");
+	}
+	const res = await api<{posts: {status: string; updated_at: string}[]}>(
+		site,
+		`/posts/${postId}/${buildNewsletterQuery(slug, options.emailSegment)}`,
+		{
+			method: "PUT",
+			body: JSON.stringify({
+				posts: [
+					{
+						status: "published",
+						...(options.emailOnly ? {email_only: true} : {}),
+						updated_at: updatedAt,
+					},
+				],
+			}),
+		},
+	);
+	return res.posts[0];
+}
+
+/**
+ * Schedules a post. A future `published_at` is required; an email-only
+ * scheduled post must also target a newsletter, matching Ghost's server rule.
+ */
+export async function schedulePost(
+	site: Site,
+	postId: string,
+	updatedAt: string,
+	options: {
+		publishedAt: string;
+		newsletterSlug?: string;
+		emailSegment?: EmailSegment;
+		emailOnly?: boolean;
+	},
+) {
+	const ms = Date.parse(options.publishedAt);
+	if (!Number.isFinite(ms)) {
+		throw new Error("Enter a valid publish date and time.");
+	}
+	if (ms <= Date.now()) {
+		throw new Error("Schedule a time in the future.");
+	}
+	if (options.emailOnly && !options.newsletterSlug?.trim()) {
+		throw new Error(
+			"Choose a newsletter before scheduling an email-only post.",
+		);
+	}
+	const res = await api<{posts: {status: string; updated_at: string}[]}>(
+		site,
+		`/posts/${postId}/${buildNewsletterQuery(
+			options.newsletterSlug,
+			options.emailSegment,
+		)}`,
+		{
+			method: "PUT",
+			body: JSON.stringify({
+				posts: [
+					{
+						status: "scheduled",
+						published_at: new Date(ms).toISOString(),
+						...(options.emailOnly ? {email_only: true} : {}),
+						updated_at: updatedAt,
+					},
+				],
+			}),
+		},
+	);
+	return res.posts[0];
+}
+
+/** Cancels a scheduled post and returns it to draft. */
+export async function unschedulePost(
+	site: Site,
+	postId: string,
+	updatedAt: string,
+) {
+	const res = await api<{posts: {status: string; updated_at: string}[]}>(
+		site,
+		`/posts/${postId}/`,
+		{
+			method: "PUT",
+			body: JSON.stringify({
+				posts: [
+					{
+						status: "draft",
+						published_at: null,
+						email_only: false,
+						updated_at: updatedAt,
+					},
+				],
 			}),
 		},
 	);
@@ -131,6 +271,14 @@ export function canEditAuthorsRole(role?: string): boolean {
 }
 
 /**
+ * Ghost's `unsafeAttrs` in `core/server/api/endpoints/posts.js` also lists
+ * `visibility`, so Contributors and Authors cannot change a post's visibility.
+ */
+export function canEditVisibilityRole(role?: string): boolean {
+	return role !== "Contributor" && role !== "Author";
+}
+
+/**
  * Normalizes a tag list for `PUT /posts/{id}/`: Ghost's `clean.postsTag` keeps
  * `{id, name, slug}` or `{name}` for newly created tags.
  */
@@ -154,6 +302,26 @@ export function serializeTagsForSave(
 				? {id: tag.id, name: trimmed, slug: tag.slug}
 				: {name: trimmed},
 		);
+	}
+	return out;
+}
+
+/**
+ * Normalizes a tier list for `PUT /posts/{id}/`: Ghost only needs tier ids,
+ * and duplicates (or blank ids) are dropped.
+ */
+export function serializeTiersForSave(
+	tiers: Array<{id?: string}>,
+): Array<{id: string}> {
+	const seen = new Set<string>();
+	const out: Array<{id: string}> = [];
+	for (const tier of tiers) {
+		const id = tier.id?.trim();
+		if (!id || seen.has(id)) {
+			continue;
+		}
+		seen.add(id);
+		out.push({id});
 	}
 	return out;
 }
