@@ -805,6 +805,187 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * Scraps (§4.4, local-first)
+ * ------------------------------------------------------------------------- */
+
+.scraps-pane .scrap-list {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.scrap-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-2) var(--space-2);
+	border-bottom: 1px solid var(--border-subtle);
+	transition: background-color var(--motion-duration) var(--motion-ease);
+}
+
+.scrap-row:hover,
+.scrap-row:focus-within {
+	background: var(--bg-row-hover);
+}
+
+.scrap-row-main {
+	display: flex;
+	align-items: flex-start;
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 2px 0;
+	border: 0;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: var(--fg-primary);
+	text-align: left;
+	cursor: default;
+}
+
+.scrap-row-main:active,
+.scrap-row-actions button:active {
+	transform: none;
+}
+
+.scrap-row-body {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.scrap-row-title-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+	min-width: 0;
+}
+
+.scrap-row-title {
+	overflow: hidden;
+	color: var(--fg-primary);
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.35;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.scrap-row-meta {
+	overflow: hidden;
+	color: var(--fg-secondary);
+	font-size: 12px;
+	line-height: 1.4;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.scrap-row-preview {
+	display: -webkit-box;
+	overflow: hidden;
+	color: var(--fg-muted);
+	font-size: 12px;
+	line-height: 1.45;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
+.scrap-row-actions {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: var(--space-1);
+	opacity: 0;
+	transition: opacity var(--motion-duration) var(--motion-ease);
+}
+
+.scrap-row:hover .scrap-row-actions,
+.scrap-row:focus-within .scrap-row-actions {
+	opacity: 1;
+}
+
+.scraps-pane .scrap-promote-button {
+	display: inline-flex;
+	align-items: center;
+	height: var(--control-height-compact);
+	padding: 0 10px;
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-pill);
+	background: transparent;
+	color: var(--fg-secondary);
+	font-size: 12px;
+	font-weight: 500;
+	white-space: nowrap;
+	cursor: default;
+	transition:
+		background-color var(--motion-duration) var(--motion-ease),
+		color var(--motion-duration) var(--motion-ease);
+}
+
+.scraps-pane .scrap-promote-button:hover:not(:disabled) {
+	background: var(--bg-row-selected);
+	color: var(--fg-primary);
+}
+
+.scraps-pane .scrap-promote-button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.scraps-pane .scrap-delete-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--control-height-compact);
+	height: var(--control-height-compact);
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: var(--fg-secondary);
+	cursor: default;
+}
+
+.scraps-pane .scrap-delete-button:hover:not(:disabled) {
+	background: var(--bg-row-selected);
+	color: var(--status-danger);
+}
+
+.scraps-pane .scrap-delete-button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* The local "Scrap - Local" badge keeps its exact wording; the generic badge
+ * style capitalizes and has no background. */
+.editor-breadcrumb .badge.badge-scrap {
+	padding: 2px 6px;
+	border-radius: var(--radius-sm);
+	background: var(--bg-row-selected);
+	color: var(--fg-secondary);
+	font-weight: 600;
+	text-transform: none;
+}
+
+/* Promote to Draft is the primary action for a local scrap. */
+.editor-shell .editor-action.editor-action-promote {
+	padding: 0 14px;
+	border-radius: var(--radius-pill);
+	background: var(--accent-primary-bg);
+	color: var(--accent-primary-fg);
+	font-weight: 600;
+}
+
+.editor-shell .editor-action.editor-action-promote:hover:not(:disabled) {
+	background: var(--accent-primary-bg);
+	color: var(--accent-primary-fg);
+	opacity: 0.88;
+}
+
+/* ---------------------------------------------------------------------------
  * Narrow windows (§4.2): the rail becomes a toggleable overlay.
  * ------------------------------------------------------------------------- */
 

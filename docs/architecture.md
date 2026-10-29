@@ -139,8 +139,8 @@ the cdhash on every rebuild and breaks the Keychain ACL.
 | `v0.1.0` – `v0.4.0` | **Shipped** | Core editor, metadata sidebar, cards parity, theming, publishing/scheduling modal, newsletter safety gate, post visibility/tiers, revisions drawer |
 | `v0.5.0 Native` | **Shipped** | Full macOS design system, 3-pane rail, borderless canvas, Koenig retheme |
 | `v0.6.0 Auth` | **Shipped** | Password login in Rust, session cookie, 2FA verification code, Staff Access Token auto-retrieval, token rotation |
-| `v0.7.0 Scraps` | **Next Up** | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
-| `v0.8.0 Feature Complete` | Planned | Offline draft cache, local autosave queue, edge-case hardening |
+| `v0.7.0 Scraps` | **Shipped** | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
+| `v0.8.0 Feature Complete` | **Next Up** | Offline draft cache, local autosave queue, edge-case hardening |
 | `v1.0.0-rc.1 Release Candidate` | Planned | Apple code signing & notarization, `tauri-plugin-updater` with GitHub Releases, DMG & Windows installers |
 | `v1.0.0 General Availability` | Planned | First official public release |
 
@@ -166,11 +166,13 @@ driven entirely by CSS tokens.
 automatic Staff Access Token retrieval via `GET /users/me/token/`, and token rotation. The
 password is never persisted; the cookie is discarded once a token is obtained.
 
-**v0.7.0 Scraps.** A local-first private scratchpad stored purely in `tauri-plugin-store`
-— offline, instant, never uploaded and never visible to other publication staff.
-**Promote to Draft** creates a Ghost draft from a scrap and opens it in the editor.
-**Demote to Scrap** backs up a draft locally, confirms, then deletes the server copy.
-Scraps live in `NavigationRail` with local search, word count and last-edited timestamps.
+**v0.7.0 Scraps (shipped).** A local-first private scratchpad stored purely in
+`tauri-plugin-store` (`scraps.json`, keyed per publication) — offline, instant, never
+uploaded and never visible to other publication staff. **Promote to Draft** creates a
+Ghost draft from a scrap and opens it in the editor. **Demote to Scrap** backs up a draft
+locally, confirms, then deletes the server copy, and only accepts posts still in `draft`
+status. Scraps live in `NavigationRail` with local search, word count and last-edited
+timestamps.
 
 **v0.8.0 Feature Complete.** Offline draft cache, a durable local autosave queue that
 replays on reconnect, and hardening of remaining edge cases (large media, long sessions,

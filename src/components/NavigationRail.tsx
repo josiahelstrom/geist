@@ -20,8 +20,12 @@ export type NavigationItem = {
 	label: string;
 	/** Post-list filter this item routes to, when it is part of Posts. */
 	filter?: PostStatusFilter;
+	/** Top-level list this item routes to, when it is not a post filter. */
+	view?: "posts" | "scraps";
 	/** Status dot rendered before the label. */
 	tone?: NavigationTone;
+	/** Optional count rendered next to the label, e.g. `Scraps (3)`. */
+	count?: number;
 };
 
 export type NavigationSection = {
@@ -43,9 +47,14 @@ export type NavigationRailProps = {
 	/** Controlled collapse state (`Cmd+\` or the titlebar toggle). */
 	sidebarOpen: boolean;
 	activeFilter?: PostStatusFilter;
+	/** Which top-level list is on screen (Posts or Scraps). */
+	activeView?: "posts" | "scraps";
+	/** Live count rendered beside the Scraps item. */
+	scrapCount?: number;
 	query?: string;
 	onQueryChange?: (query: string) => void;
 	onSelectFilter?: (filter: PostStatusFilter) => void;
+	onSelectView?: (view: "posts" | "scraps") => void;
 	onSelectSite?: (site: Site) => void;
 	/** Custom item routing (the v0.7 `Scraps` seam). */
 	onSelectItem?: (item: NavigationItem, section: NavigationSection) => void;
@@ -145,6 +154,7 @@ const DEFAULT_SECTIONS: NavigationSection[] = [
 				filter: "published",
 				tone: "published",
 			},
+			{id: "scraps", label: "Scraps", view: "scraps"},
 		],
 	},
 ];
@@ -170,9 +180,12 @@ export default function NavigationRail({
 	sections = DEFAULT_SECTIONS,
 	sidebarOpen,
 	activeFilter,
+	activeView = "posts",
+	scrapCount,
 	query = "",
 	onQueryChange,
 	onSelectFilter,
+	onSelectView,
 	onSelectSite,
 	onSelectItem,
 	onNewPost,
@@ -211,6 +224,10 @@ export default function NavigationRail({
 	const multipleSites = Boolean(sites && sites.length > 1 && onSelectSite);
 
 	function selectItem(section: NavigationSection, item: NavigationItem) {
+		if (item.view && onSelectView) {
+			onSelectView(item.view);
+			return;
+		}
 		if (onSelectItem) {
 			onSelectItem(item, section);
 			return;
@@ -218,6 +235,13 @@ export default function NavigationRail({
 		if (item.filter) {
 			onSelectFilter?.(item.filter);
 		}
+	}
+
+	function itemCount(item: NavigationItem): number | undefined {
+		if (item.id === "scraps" && typeof scrapCount === "number") {
+			return scrapCount;
+		}
+		return item.count;
 	}
 
 	function toggleSection(section: NavigationSection) {
@@ -317,8 +341,12 @@ export default function NavigationRail({
 								<div className="rail-section-items">
 									{section.items?.map(item => {
 										const active =
-											item.filter !== undefined &&
-											item.filter === activeFilter;
+											(item.filter !== undefined &&
+												item.filter === activeFilter &&
+												activeView === "posts") ||
+											(item.view !== undefined &&
+												item.view === activeView);
+										const count = itemCount(item);
 										return (
 											<button
 												type="button"
@@ -330,6 +358,11 @@ export default function NavigationRail({
 												}
 												onClick={() => selectItem(section, item)}
 												aria-current={active ? "page" : undefined}
+												data-testid={
+													item.view === "scraps"
+														? "rail-scraps-item"
+														: undefined
+												}
 											>
 												{item.tone && (
 													<span
@@ -337,7 +370,12 @@ export default function NavigationRail({
 														aria-hidden="true"
 													/>
 												)}
-												<span className="rail-nav-label">{item.label}</span>
+												<span className="rail-nav-label">
+													{item.label}
+													{typeof count === "number" && count > 0
+														? ` (${count})`
+														: ""}
+												</span>
 											</button>
 										);
 									})}

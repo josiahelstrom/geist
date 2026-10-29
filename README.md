@@ -32,7 +32,7 @@ Override the signing identity with `GEIST_SIGN_IDENTITY` if yours differs.
 ## Checks
 
 ```bash
-npm run check        # tsc --noEmit + 155 unit tests
+npm run check        # tsc --noEmit + 186 unit tests
 npm run test:rust    # keyring round-trip, HTTP scope, preview URL guard, JWT minting,
                      # staff login/2FA handling
 ```
@@ -54,7 +54,7 @@ npm run tauri build
 
 The `.app` and `.dmg` land in:
 - `src-tauri/target/release/bundle/macos/Geist.app`
-- `src-tauri/target/release/bundle/dmg/Geist_0.6.0_aarch64.dmg`
+- `src-tauri/target/release/bundle/dmg/Geist_0.7.0_aarch64.dmg`
 
 ## How it works
 
@@ -92,6 +92,18 @@ Deliberate safety rules, each covered by a test:
   explicitly override, because newer Ghost card schemas could be lost on save. If a post
   contains an unknown Lexical node, an error boundary catches it and offers
   "Open in Ghost Admin ↗" instead of blanking the editor.
+
+v0.7.0 "Scraps" adds a local-first private scratchpad. A scrap is a note that lives
+only on this Mac: it is written to `scraps.json` through `tauri-plugin-store`, keyed per
+publication, with no Ghost API call on create, edit or delete — so it works offline,
+responds instantly, and is never visible to other staff on the site. The Scraps list in
+the navigation rail sorts newest-updated first and supports local search across title,
+body text and excerpt, with a live word count and last-edited timestamp per scrap.
+**Promote to Draft** creates a Ghost draft from the scrap and opens it in the editor
+(the local copy is removed by default, or kept and linked through `promotedPostId`).
+**Demote to Scrap** backs up a draft locally, confirms, then deletes the server copy —
+and refuses to run on published or scheduled posts, since those have already reached, or
+are queued for, readers. Scrap content never leaves the machine until you promote it.
 
 v0.6.0 "Auth" adds password sign-in. Connecting with your Ghost staff email and
 password runs entirely in Rust: the password is posted to

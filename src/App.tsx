@@ -17,16 +17,21 @@ import {
 	setActiveBase,
 } from "./lib/sites";
 import type {SaveStatus} from "./lib/saver";
+import {listScraps, type Scrap} from "./lib/scraps";
 import Connect from "./components/Connect";
 import NavigationRail from "./components/NavigationRail";
 import PostList from "./components/PostList";
 import Editor from "./components/Editor";
+import ScrapsList from "./components/ScrapsList";
 import TitleBar from "./components/TitleBar";
 
 type View =
 	| {name: "connect"}
 	| {name: "list"}
-	| {name: "editor"; postId: string};
+	| {name: "editor"; postId: string}
+	| {name: "scrap-editor"};
+
+type ListView = "posts" | "scraps";
 
 const THEME_ORDER: Theme[] = ["light", "dark", "system"];
 
@@ -70,8 +75,11 @@ function pressControl(testId: string): boolean {
 export default function App() {
 	const [sites, setSites] = useState<Site[]>(() => loadSites());
 	const [site, setSite] = useState<Site | null>(null);
-	const [view, setView] = useState<View>({name: "connect"});
+	const [route, setRoute] = useState<View>({name: "connect"});
+	const [view, setView] = useState<ListView>("posts");
 	const [activePost, setActivePost] = useState<Post | null>(null);
+	const [activeScrapId, setActiveScrapId] = useState<string | null>(null);
+	const [scrapCount, setScrapCount] = useState(0);
 	const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -107,7 +115,7 @@ export default function App() {
 				initial.find(s => s.base === getActiveBase()) ?? initial[0];
 			if (active) {
 				setSite(active);
-				setView({name: "list"});
+				setRoute({name: "list"});
 			}
 		}
 
@@ -123,7 +131,7 @@ export default function App() {
 				const active =
 					stored.find(s => s.base === activeBase) ?? stored[0];
 				if (active) {
-					setView({name: "list"});
+					setRoute({name: "list"});
 				}
 				return active ?? null;
 			});
@@ -138,30 +146,50 @@ export default function App() {
 		setSites(nextSites);
 		setSite(chosen);
 		setActivePost(null);
+		setActiveScrapId(null);
+		setView("posts");
 		setSaveStatus(null);
-		setView({name: "list"});
+		setRoute({name: "list"});
 	}, []);
 
 	const handleDisconnect = useCallback(() => {
 		setSite(null);
 		setActivePost(null);
+		setActiveScrapId(null);
 		setSaveStatus(null);
-		setView({name: "connect"});
+		setRoute({name: "connect"});
 	}, []);
 
 	const handleSelectSite = useCallback((next: Site) => {
 		setSite(next);
 		setActiveBase(next.base);
 		setActivePost(null);
+		setActiveScrapId(null);
+		setView("posts");
 		setSaveStatus(null);
-		setView({name: "list"});
+		setRoute({name: "list"});
 	}, []);
 
 	const handleOpenPost = useCallback((post: Post) => {
 		setActivePost(post);
+		setActiveScrapId(null);
+		setView("posts");
 		setSaveStatus("saved");
 		setInspectorOpen(false);
-		setView({name: "editor", postId: post.id});
+		setRoute({name: "editor", postId: post.id});
+	}, []);
+
+	const handleOpenScrap = useCallback((scrap: Scrap) => {
+		setActivePost(null);
+		setActiveScrapId(scrap.id);
+		setView("scraps");
+		setSaveStatus("saved");
+		setInspectorOpen(false);
+		setRoute({name: "scrap-editor"});
+	}, []);
+
+	const handleSelectView = useCallback((next: ListView) => {
+		setView(next);
 	}, []);
 
 	const handleCreateDraft = useCallback(async (): Promise<Post | null> => {
@@ -173,10 +201,33 @@ export default function App() {
 
 	const handleBackToList = useCallback(() => {
 		setActivePost(null);
+		setActiveScrapId(null);
 		setSaveStatus(null);
 		setInspectorOpen(false);
-		setView({name: "list"});
+		setRoute({name: "list"});
 	}, []);
+
+	// Keep the rail badge live whenever the site or list/editor changes. The
+	// ScrapsList also reports its own count immediately after local mutations.
+	useEffect(() => {
+		if (!site) {
+			setScrapCount(0);
+			return;
+		}
+		let cancelled = false;
+		listScraps(site.base)
+			.then(list => {
+				if (!cancelled) {
+					setScrapCount(list.length);
+				}
+			})
+			.catch(() => {
+				/* The list view surfaces storage errors; the badge can stay stale. */
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [site, route.name, view]);
 
 	const handleNewPost = useCallback(async () => {
 		if (site && shouldEnforceReadOnly(site.version)) {
@@ -309,7 +360,7 @@ export default function App() {
 	// Keep the titlebar's title, status and save indicator in step with the
 	// editor. The editor remains the owner of all three.
 	useEffect(() => {
-		if (view.name !== "editor") {
+		if (route.name !== "editor") {
 			return;
 		}
 
@@ -379,13 +430,17 @@ export default function App() {
 			observer?.disconnect();
 			window.removeEventListener("input", onTitleInput, true);
 		};
-	}, [view]);
+	}, [route]);
 
 	const titleBar = (
 		<TitleBar
-			postTitle={activePost?.title ?? null}
+			postTitle={activePost?.title ?? (activeScrapId ? "Scrap" : null)}
 			postStatus={activePost?.status ?? null}
-			saveStatus={view.name === "editor" ? saveStatus : null}
+			saveStatus={
+				route.name === "editor" || route.name === "scrap-editor"
+					? saveStatus
+					: null
+			}
 			sidebarOpen={sidebarOpen}
 			inspectorOpen={inspectorOpen}
 			onToggleSidebar={toggleSidebar}
@@ -396,7 +451,7 @@ export default function App() {
 		/>
 	);
 
-	if (view.name === "connect" || !site) {
+	if (route.name === "connect" || !site) {
 		return (
 			<Connect
 				sites={sites}
@@ -409,7 +464,7 @@ export default function App() {
 		);
 	}
 
-	if (view.name === "list") {
+	if (route.name === "list") {
 		return (
 			<div
 				className="app-shell"
@@ -426,26 +481,44 @@ export default function App() {
 							sites={sites}
 							sidebarOpen={sidebarOpen}
 							activeFilter={postFilter}
+							activeView={view}
+							scrapCount={scrapCount}
 							query={postQuery}
 							onQueryChange={setPostQuery}
-							onSelectFilter={setPostFilter}
+							onSelectFilter={filter => {
+								setPostFilter(filter);
+								setView("posts");
+							}}
+							onSelectView={handleSelectView}
 							onSelectSite={handleSelectSite}
 							onNewPost={handleNewPost}
 							onOpenSettings={handleDisconnect}
 						/>
 						<main className="app-workspace">
-							<PostList
-								site={site}
-								sites={sites}
-								filter={postFilter}
-								onFilterChange={setPostFilter}
-								searchQuery={postQuery}
-								onSearchQueryChange={setPostQuery}
-								onOpenPost={handleOpenPost}
-								onSelectSite={handleSelectSite}
-								onDisconnect={handleDisconnect}
-								onCreateDraft={handleCreateDraft}
-							/>
+							{view === "scraps" ? (
+								<ScrapsList
+									site={site}
+									onOpenScrap={handleOpenScrap}
+									onOpenPost={handleOpenPost}
+									onScrapCountChange={setScrapCount}
+								/>
+							) : (
+								<PostList
+									site={site}
+									sites={sites}
+									filter={postFilter}
+									onFilterChange={filter => {
+										setPostFilter(filter);
+										setView("posts");
+									}}
+									searchQuery={postQuery}
+									onSearchQueryChange={setPostQuery}
+									onOpenPost={handleOpenPost}
+									onSelectSite={handleSelectSite}
+									onDisconnect={handleDisconnect}
+									onCreateDraft={handleCreateDraft}
+								/>
+							)}
 						</main>
 					</div>
 				</div>
@@ -460,12 +533,24 @@ export default function App() {
 		>
 			{titleBar}
 			<div className="app-shell-body">
-				<Editor
-					site={site}
-					postId={view.postId}
-					onBack={handleBackToList}
-					onReconnect={handleDisconnect}
-				/>
+				{route.name === "scrap-editor" && activeScrapId ? (
+					<Editor
+						key={activeScrapId}
+						site={site}
+						scrapId={activeScrapId}
+						onBack={handleBackToList}
+						onReconnect={handleDisconnect}
+						onOpenPost={handleOpenPost}
+					/>
+				) : route.name === "editor" ? (
+					<Editor
+						site={site}
+						postId={route.postId}
+						onBack={handleBackToList}
+						onReconnect={handleDisconnect}
+						onOpenScrap={handleOpenScrap}
+					/>
+				) : null}
 			</div>
 		</div>
 	);

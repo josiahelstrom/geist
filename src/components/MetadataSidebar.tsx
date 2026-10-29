@@ -47,6 +47,10 @@ type Props = {
 		patch: Record<string, unknown>,
 	) => void;
 	onDeletePost: () => Promise<void>;
+	/** Back up this draft locally and remove it from Ghost. */
+	onDemoteToScrap?: () => Promise<void>;
+	canDemoteToScrap?: boolean;
+	demotingToScrap?: boolean;
 	onClose: () => void;
 	/** Version guard is active: render values but block every mutation. */
 	readOnly?: boolean;
@@ -115,6 +119,9 @@ export default function MetadataSidebar({
 	onOpenRevisions,
 	onChange,
 	onDeletePost,
+	onDemoteToScrap,
+	canDemoteToScrap = false,
+	demotingToScrap = false,
 	onClose,
 	readOnly = false,
 }: Props) {
@@ -788,6 +795,26 @@ export default function MetadataSidebar({
 					>
 						Open in Ghost Admin ↗
 					</button>
+					{onDemoteToScrap && (
+						<button
+							type="button"
+							className="inspector-secondary-button inspector-footer-button"
+							onClick={() => void onDemoteToScrap()}
+							disabled={
+								!canDemoteToScrap ||
+								readOnly ||
+								demotingToScrap
+							}
+							title={
+								canDemoteToScrap
+									? "Move this draft to local Scraps"
+									: "Only draft posts can be moved to Scraps"
+							}
+							data-testid="demote-to-scrap-button"
+						>
+							{demotingToScrap ? "Moving…" : "Demote to Scrap"}
+						</button>
+					)}
 					<button
 						type="button"
 						className="inspector-danger-button inspector-footer-button"

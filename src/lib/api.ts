@@ -372,6 +372,43 @@ export async function fetchPost(site: Site, id: string): Promise<PostDetail> {
 	return res.posts[0];
 }
 
+export type CreatePostInput = {
+	title: string;
+	lexical: string;
+	custom_excerpt?: string | null;
+};
+
+/**
+ * Creates a Ghost draft from local content.
+ *
+ * Safety rules 4.2 and 4.3: only `title`, `lexical`, and `custom_excerpt` are
+ * sent. No `newsletter`, `email_segment`, `html`, or `?source=html` is ever
+ * included, so creating a draft can never email subscribers.
+ */
+export async function createPost(
+	site: Site,
+	input: CreatePostInput,
+): Promise<PostDetail> {
+	const res = await api<{posts: PostDetail[]}>(
+		site,
+		"/posts/?formats=lexical",
+		{
+			method: "POST",
+			body: JSON.stringify({
+				posts: [
+					{
+						title: input.title,
+						lexical: input.lexical,
+						custom_excerpt: input.custom_excerpt ?? null,
+						status: "draft",
+					},
+				],
+			}),
+		},
+	);
+	return res.posts[0];
+}
+
 export async function listSiteTags(site: Site): Promise<TagSummary[]> {
 	try {
 		const res = await api<{tags: TagSummary[]}>(

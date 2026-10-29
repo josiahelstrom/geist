@@ -44,6 +44,13 @@ import {
 	type PreviewMemberStatus,
 } from "../lib/posts";
 import {buildRestorePatch} from "../lib/revisions";
+import {
+	demoteDraftToScrap,
+	getScrap,
+	promoteScrapToDraft,
+	updateScrap,
+	type Scrap,
+} from "../lib/scraps";
 import {versionBanner, shouldEnforceReadOnly} from "../lib/version";
 import EditorErrorBoundary from "./EditorErrorBoundary";
 import MetadataSidebar, {type PostMetadataState} from "./MetadataSidebar";
@@ -52,9 +59,16 @@ import RevisionsDrawer from "./RevisionsDrawer";
 
 type Props = {
 	site: Site;
-	postId: string;
+	/** Ghost post being edited, when this is a server-backed editor. */
+	postId?: string;
+	/** Local scrap being edited, when this is a local-first editor. */
+	scrapId?: string;
 	onBack: () => void;
 	onReconnect?: () => void;
+	/** Promote (scrap → draft) hands the new Ghost post to the app. */
+	onOpenPost?: (post: PostDetail) => void;
+	/** Demote (draft → scrap) hands the new local scrap to the app. */
+	onOpenScrap?: (scrap: Scrap) => void;
 };
 
 const STATUS_COPY: Record<SaveStatus, string> = {
@@ -154,22 +168,34 @@ function metaFromPost(p: PostDetail): PostMetadataState {
 	};
 }
 
-export default function Editor({site, postId, onBack, onReconnect}: Props) {
+const EMPTY_META: PostMetadataState = {
+	slug: "",
+	customExcerpt: "",
+	featureImage: "",
+	featureImageAlt: "",
+	featureImageCaption: "",
+	featured: false,
+	visibility: "public",
+	tiers: [],
+	tags: [],
+	authors: [],
+};
+
+export default function Editor({
+	site,
+	postId,
+	scrapId,
+	onBack,
+	onReconnect,
+	onOpenPost,
+	onOpenScrap,
+}: Props) {
+	const isScrapMode = Boolean(scrapId);
 	const [post, setPost] = useState<PostDetail | null>(null);
+	const [scrap, setScrap] = useState<Scrap | null>(null);
 	const [editorVersion, setEditorVersion] = useState(0);
 	const [title, setTitle] = useState("");
-	const [meta, setMeta] = useState<PostMetadataState>({
-		slug: "",
-		customExcerpt: "",
-		featureImage: "",
-		featureImageAlt: "",
-		featureImageCaption: "",
-		featured: false,
-		visibility: "public",
-		tiers: [],
-		tags: [],
-		authors: [],
-	});
+	const [meta, setMeta] = useState<PostMetadataState>(EMPTY_META);
 	const [siteTags, setSiteTags] = useState<TagSummary[]>([]);
 	const [siteAuthors, setSiteAuthors] = useState<AuthorSummary[]>([]);
 	const [siteTiers, setSiteTiers] = useState<TierSummary[]>([]);
@@ -187,6 +213,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	const [errorStatus, setErrorStatus] = useState<number | undefined>();
 	const [conflict, setConflict] = useState(false);
 	const [publishing, setPublishing] = useState(false);
+	const [demoting, setDemoting] = useState(false);
 	const [readOnlyOverride, setReadOnlyOverride] = useState(false);
 	const [lexical, setLexical] = useState<string>("");
 
@@ -198,16 +225,37 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	const saverRef = useRef<ReturnType<typeof createSaver> | null>(null);
 	const changeFilterRef = useRef(createChangeFilter());
 	const editorErrorRef = useRef(false);
-	const activePostIdRef = useRef(postId);
+	const activePostIdRef = useRef<string | undefined>(postId);
 	const excerptRef = useRef<HTMLTextAreaElement | null>(null);
+	const scrapRef = useRef<Scrap | null>(null);
+	const scrapSaveTimerRef = useRef<number | undefined>(undefined);
+	/**
+	 * True while a promote/demote/publish is in flight. Scrap autosave is
+	 * suspended then so a late debounce cannot try to update a scrap that was
+	 * just promoted (and therefore deleted) or navigated away from.
+	 */
+	const scrapSaveBlockedRef = useRef(false);
+	const pendingScrapPatchRef = useRef<
+		Partial<Pick<Scrap, "title" | "lexical" | "customExcerpt">>
+	>({});
 
 	useEffect(() => {
 		activePostIdRef.current = postId;
 	}, [postId]);
 
+	// Any long-running publish/promote/demote action suspends scrap autosave;
+	// the promote/demote handlers also set this synchronously before awaiting.
+	useEffect(() => {
+		scrapSaveBlockedRef.current = publishing || demoting;
+	}, [publishing, demoting]);
+
 	// Computed synchronously so the guard is correct on the very first render
-	// (stable callbacks read it through the ref).
-	const isReadOnly = shouldEnforceReadOnly(site.version) && !readOnlyOverride;
+	// (stable callbacks read it through the ref). Scraps are local-only, so the
+	// Ghost version guard never blocks editing them.
+	const isReadOnly =
+		!isScrapMode &&
+		shouldEnforceReadOnly(site.version) &&
+		!readOnlyOverride;
 	const isReadOnlyRef = useRef(isReadOnly);
 	isReadOnlyRef.current = isReadOnly;
 
@@ -250,6 +298,8 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	const bindPost = useCallback(
 		(p: PostDetail) => {
 			setPost(p);
+			setScrap(null);
+			scrapRef.current = null;
 			setTitle(p.title ?? "");
 			setLexical(p.lexical ?? "");
 			setMeta(metaFromPost(p));
@@ -270,10 +320,57 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		[site],
 	);
 
+	const bindScrap = useCallback((s: Scrap) => {
+		setScrap(s);
+		scrapRef.current = s;
+		setPost(null);
+		setTitle(s.title);
+		setLexical(s.lexical);
+		setMeta({...EMPTY_META, customExcerpt: s.customExcerpt ?? ""});
+		setConflict(false);
+		setStatus("clean");
+		setStatusMessage(undefined);
+		setEditorError(null);
+		editorErrorRef.current = false;
+		setDrawer("none");
+		setPublishModalOpen(false);
+		changeFilterRef.current.reset();
+		pendingScrapPatchRef.current = {};
+	}, []);
+
 	useEffect(() => {
 		let cancelled = false;
 		setError(null);
 		setErrorStatus(undefined);
+
+		if (scrapId) {
+			getScrap(site.base, scrapId)
+				.then(found => {
+					if (cancelled) {
+						return;
+					}
+					if (!found) {
+						setError("Scrap not found.");
+						return;
+					}
+					bindScrap(found);
+				})
+				.catch(err => {
+					if (!cancelled) {
+						setError(err instanceof Error ? err.message : String(err));
+					}
+				});
+
+			return () => {
+				cancelled = true;
+			};
+		}
+
+		if (!postId) {
+			return () => {
+				cancelled = true;
+			};
+		}
 
 		fetchPost(site, postId)
 			.then(p => {
@@ -294,6 +391,17 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 				}
 			});
 
+		return () => {
+			cancelled = true;
+		};
+	}, [site, postId, scrapId, bindPost, bindScrap]);
+
+	// Post-only metadata pickers. Local scraps never need the Ghost taxonomy.
+	useEffect(() => {
+		if (!postId || scrapId) {
+			return;
+		}
+		let cancelled = false;
 		listSiteTags(site).then(tags => {
 			if (!cancelled) {
 				setSiteTags(tags);
@@ -314,11 +422,10 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 				setNewsletters(list);
 			}
 		});
-
 		return () => {
 			cancelled = true;
 		};
-	}, [site, postId, bindPost]);
+	}, [site, postId, scrapId]);
 
 	const refreshSnippets = useCallback(() => {
 		if (site.keyKind === "staff") {
@@ -350,8 +457,14 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	);
 
 	// Card-config data arrives after the editor mounts; cardConfig only lives
-	// in Koenig's context, so updating it does not remount the editor.
+	// in Koenig's context, so updating it does not remount the editor. Scraps
+	// stay completely local, so they skip these Ghost settings calls.
 	useEffect(() => {
+		if (isScrapMode) {
+			setSettings(DEFAULT_SETTINGS);
+			setSnippets([]);
+			return;
+		}
 		let cancelled = false;
 		setSettings(DEFAULT_SETTINGS);
 		setSnippets([]);
@@ -370,7 +483,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		return () => {
 			cancelled = true;
 		};
-	}, [site]);
+	}, [site, isScrapMode]);
 
 	const fileUploader = useMemo(() => makeFileUploader(site), [site]);
 
@@ -388,20 +501,114 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		[site, settings, snippets, refreshSnippets, meta.visibility],
 	);
 
-	const handleBody = useCallback((state: unknown) => {
-		if (isReadOnlyRef.current) {
-			return; // version guard is active; never queue edits
-		}
-		if (editorErrorRef.current) {
-			return; // the editor is in a failed state; never save its body
-		}
-		const next = JSON.stringify(state);
-		setLexical(next);
-		// Koenig emits onChange on mount; only genuine edits should save.
-		if (changeFilterRef.current.accept(next)) {
-			saverRef.current?.queueDebounced({lexical: next});
+	const cancelPendingScrapSave = useCallback(() => {
+		if (scrapSaveTimerRef.current !== undefined) {
+			window.clearTimeout(scrapSaveTimerRef.current);
+			scrapSaveTimerRef.current = undefined;
 		}
 	}, []);
+
+	const flushScrapSave = useCallback(async () => {
+		cancelPendingScrapSave();
+		const target = scrapRef.current;
+		const pending = pendingScrapPatchRef.current;
+		if (!target || Object.keys(pending).length === 0) {
+			return;
+		}
+
+		pendingScrapPatchRef.current = {};
+		setStatus("saving");
+		try {
+			const updated = await updateScrap(site.base, target.id, pending);
+			scrapRef.current = updated;
+			setScrap(prev =>
+				prev
+					? {
+							...prev,
+							updatedAt: updated.updatedAt,
+							wordCount: updated.wordCount,
+						}
+					: prev,
+			);
+			if (Object.keys(pendingScrapPatchRef.current).length === 0) {
+				setStatus("saved");
+				setStatusMessage(undefined);
+			} else {
+				setStatus("dirty");
+			}
+		} catch (err) {
+			pendingScrapPatchRef.current = {
+				...pending,
+				...pendingScrapPatchRef.current,
+			};
+			setStatus("error");
+			setStatusMessage(err instanceof Error ? err.message : String(err));
+		}
+	}, [site.base, cancelPendingScrapSave]);
+
+	const queueScrapSave = useCallback(
+		(
+			patch: Partial<
+				Pick<Scrap, "title" | "lexical" | "customExcerpt">
+			>,
+		) => {
+			// A promote/demote/publish is running: the scrap this editor points
+			// at may already be gone (or is about to be), so dropping the edit
+			// beats surfacing a "Scrap not found" error mid-navigation.
+			if (scrapSaveBlockedRef.current) {
+				cancelPendingScrapSave();
+				return;
+			}
+			pendingScrapPatchRef.current = {
+				...pendingScrapPatchRef.current,
+				...patch,
+			};
+			setStatus("dirty");
+			if (scrapSaveTimerRef.current !== undefined) {
+				window.clearTimeout(scrapSaveTimerRef.current);
+			}
+			scrapSaveTimerRef.current = window.setTimeout(() => {
+				void flushScrapSave();
+			}, 600);
+		},
+		[flushScrapSave, cancelPendingScrapSave],
+	);
+
+	// Leaving the editor (or switching scraps) must not drop a pending local
+	// edit. This is local-only, so firing it during cleanup is safe.
+	useEffect(() => {
+		return () => {
+			cancelPendingScrapSave();
+			const target = scrapRef.current;
+			const pending = pendingScrapPatchRef.current;
+			if (target && Object.keys(pending).length > 0) {
+				pendingScrapPatchRef.current = {};
+				void updateScrap(site.base, target.id, pending).catch(() => {});
+			}
+		};
+	}, [site.base, scrapId, cancelPendingScrapSave]);
+
+	const handleBody = useCallback(
+		(state: unknown) => {
+			if (isReadOnlyRef.current) {
+				return; // version guard is active; never queue edits
+			}
+			if (editorErrorRef.current) {
+				return; // the editor is in a failed state; never save its body
+			}
+			const next = JSON.stringify(state);
+			setLexical(next);
+			// Koenig emits onChange on mount; only genuine edits should save.
+			if (changeFilterRef.current.accept(next)) {
+				if (isScrapMode) {
+					queueScrapSave({lexical: next});
+				} else {
+					saverRef.current?.queueDebounced({lexical: next});
+				}
+			}
+		},
+		[isScrapMode, queueScrapSave],
+	);
 
 	const handleEditorError = useCallback((err: unknown) => {
 		editorErrorRef.current = true;
@@ -410,13 +617,20 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		throw err; // keep Lexical's contract: onError must not swallow
 	}, []);
 
-	const handleTitle = useCallback((value: string) => {
-		if (isReadOnlyRef.current) {
-			return;
-		}
-		setTitle(value);
-		saverRef.current?.queueDebounced({title: value});
-	}, []);
+	const handleTitle = useCallback(
+		(value: string) => {
+			if (isReadOnlyRef.current) {
+				return;
+			}
+			setTitle(value);
+			if (isScrapMode) {
+				queueScrapSave({title: value});
+			} else {
+				saverRef.current?.queueDebounced({title: value});
+			}
+		},
+		[isScrapMode, queueScrapSave],
+	);
 
 	const handleMetaChange = useCallback(
 		(nextMeta: PostMetadataState, patch: Record<string, unknown>) => {
@@ -424,12 +638,18 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 				return;
 			}
 			setMeta(nextMeta);
-			saverRef.current?.queueDebounced(patch, 900);
+			if (isScrapMode) {
+				queueScrapSave({
+					customExcerpt: nextMeta.customExcerpt || null,
+				});
+			} else {
+				saverRef.current?.queueDebounced(patch, 900);
+			}
 		},
-		[],
+		[isScrapMode, queueScrapSave],
 	);
 
-	// Cmd+S saves now, as a revision.
+	// Cmd+S saves now, as a revision (or flushes the local scrap save).
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
@@ -437,14 +657,18 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 				if (isReadOnlyRef.current) {
 					return;
 				}
+				if (scrapId) {
+					void flushScrapSave();
+					return;
+				}
 				saverRef.current
 					?.flush(true)
-					.then(() => refreshRevisions(postId));
+					.then(() => postId && refreshRevisions(postId));
 			}
 		}
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [postId, refreshRevisions]);
+	}, [postId, scrapId, flushScrapSave, refreshRevisions]);
 
 	// The native menu's "Save Revision" item dispatches this event so it takes
 	// exactly the same path as the Cmd+S shortcut above.
@@ -453,14 +677,22 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 			if (isReadOnlyRef.current) {
 				return;
 			}
+			if (scrapId) {
+				void flushScrapSave();
+				return;
+			}
 			saverRef.current
 				?.flush(true)
-				.then(() => refreshRevisions(activePostIdRef.current));
+				.then(
+					() =>
+						activePostIdRef.current &&
+						refreshRevisions(activePostIdRef.current),
+				);
 		}
 		window.addEventListener("geist:save-revision", onSaveRevision);
 		return () =>
 			window.removeEventListener("geist:save-revision", onSaveRevision);
-	}, [refreshRevisions]);
+	}, [scrapId, flushScrapSave, refreshRevisions]);
 
 	// Warn before closing with unsaved work.
 	useEffect(() => {
@@ -509,6 +741,20 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 	}
 
 	async function handleBack() {
+		if (isScrapMode) {
+			await flushScrapSave();
+			if (Object.keys(pendingScrapPatchRef.current).length > 0) {
+				const leave = window.confirm(
+					"Your latest scrap changes could not be saved locally.\n\nLeave anyway and discard them?",
+				);
+				if (!leave) {
+					return;
+				}
+				pendingScrapPatchRef.current = {};
+			}
+			onBack();
+			return;
+		}
 		const saver = saverRef.current;
 		if (saver) {
 			await saver.flush();
@@ -529,17 +775,21 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		return (
 			<div className="error-banner" role="alert" data-testid="editor-fallback">
 				<span>
-					This post can't be shown in the editor (it may use content from a
-					newer Ghost). Your post has not been changed. Details: {message}
+					{isScrapMode ? "This scrap" : "This post"} can&apos;t be shown in the
+					editor (it may use content from a newer Ghost). Your{" "}
+					{isScrapMode ? "scrap has" : "post has"} not been changed. Details:{" "}
+					{message}
 				</span>
-				<div className="banner-actions">
-					<button
-						type="button"
-						onClick={() => post && openPostInAdmin(post.id, site)}
-					>
-						Open in Ghost Admin ↗
-					</button>
-				</div>
+				{post && (
+					<div className="banner-actions">
+						<button
+							type="button"
+							onClick={() => openPostInAdmin(post.id, site)}
+						>
+							Open in Ghost Admin ↗
+						</button>
+					</div>
+				)}
 			</div>
 		);
 	}
@@ -767,6 +1017,86 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 			});
 	}
 
+	async function handlePromoteScrap() {
+		const current = scrapRef.current;
+		if (!current) {
+			return;
+		}
+		const ok = window.confirm(
+			`Promote "${title.trim() || "Untitled Scrap"}" to a Ghost draft on "${site.title}"?\n\n` +
+				"The scrap will be removed from this Mac and uploaded to your blog as a draft.",
+		);
+		if (!ok) {
+			return;
+		}
+
+		setPublishing(true);
+		scrapSaveBlockedRef.current = true;
+		cancelPendingScrapSave();
+		setError(null);
+		try {
+			await flushScrapSave();
+			if (Object.keys(pendingScrapPatchRef.current).length > 0) {
+				throw new Error(
+					"The latest scrap changes could not be saved locally. Promote cancelled.",
+				);
+			}
+			const draft = await promoteScrapToDraft(site, current.id);
+			onOpenPost?.(draft);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			scrapSaveBlockedRef.current = false;
+			setPublishing(false);
+		}
+	}
+
+	async function handleDemoteToScrap() {
+		if (!post || post.status !== "draft" || isReadOnlyRef.current) {
+			return;
+		}
+		const ok = window.confirm(
+			"Move this draft to local Scraps? It will be deleted from your Ghost blog and stored privately on your Mac.",
+		);
+		if (!ok) {
+			return;
+		}
+
+		const unverifiedMessage =
+			"Cannot demote this post: could not verify current draft status on the server. Please check your connection or refresh the post.";
+
+		setDemoting(true);
+		scrapSaveBlockedRef.current = true;
+		cancelPendingScrapSave();
+		setError(null);
+		try {
+			await saverRef.current?.flush();
+
+			// Demoting deletes the remote post, so it must run against a fresh
+			// server snapshot. A stale local copy could say "draft" while the
+			// post is actually published or scheduled, and there is no safe way
+			// to fall back when the check itself fails.
+			let fresh: PostDetail;
+			try {
+				fresh = await fetchPost(site, post.id);
+			} catch {
+				throw new Error(unverifiedMessage);
+			}
+			if (fresh.status !== "draft") {
+				throw new Error(unverifiedMessage);
+			}
+
+			const localScrap = await demoteDraftToScrap(site, fresh);
+			saverRef.current?.halt();
+			onOpenScrap?.(localScrap);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			scrapSaveBlockedRef.current = false;
+			setDemoting(false);
+		}
+	}
+
 	async function handleDeletePost() {
 		if (!post) {
 			return;
@@ -794,7 +1124,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		);
 	}
 
-	if (error && !post) {
+	if (error && !post && !scrap) {
 		const needsReconnect =
 			errorStatus === 401 ||
 			errorStatus === 403 ||
@@ -814,7 +1144,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		);
 	}
 
-	if (!post) {
+	if (!post && !scrap) {
 		return (
 			<div className="editor">
 				<p className="muted">Loading…</p>
@@ -822,9 +1152,12 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 		);
 	}
 
-	const canPublish = canPublishRole(site.role);
-	const hasDrawer = drawer !== "none";
-	const banner = versionBanner(site.version);
+	const canPublish = Boolean(post) && canPublishRole(site.role);
+	const hasDrawer = !isScrapMode && drawer !== "none";
+	const banner = isScrapMode ? null : versionBanner(site.version);
+	const documentId = post?.id ?? scrap?.id ?? "";
+	const initialLexical = scrap?.lexical ?? post?.lexical ?? "";
+	const documentStatus = post?.status;
 
 	return (
 		<div className={hasDrawer ? "editor-shell with-sidebar" : "editor-shell"}>
@@ -835,16 +1168,25 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 							type="button"
 							className="editor-icon-button"
 							onClick={handleBack}
-							title="Back to posts"
-							aria-label="Back to posts"
+							title={isScrapMode ? "Back to scraps" : "Back to posts"}
+							aria-label={isScrapMode ? "Back to scraps" : "Back to posts"}
 							data-testid="back-button"
 						>
 							<ArrowLeftIcon />
 						</button>
 						<span className="editor-breadcrumb" aria-live="polite">
-							<span className={`badge badge-${post.status}`}>
-								{post.status}
-							</span>
+							{isScrapMode ? (
+								<span
+									className="badge badge-scrap"
+									data-testid="scrap-local-badge"
+								>
+									Scrap · Local
+								</span>
+							) : (
+								<span className={`badge badge-${documentStatus}`}>
+									{documentStatus}
+								</span>
+							)}
 							<span className="editor-breadcrumb-sep" aria-hidden="true">
 								-
 							</span>
@@ -855,7 +1197,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 								{status === "clean" ? "Saved" : STATUS_COPY[status]}
 							</span>
 						</span>
-						{post.status === "scheduled" && post.published_at && (
+						{documentStatus === "scheduled" && post?.published_at && (
 							<span
 								className="editor-scheduled-hint"
 								data-testid="scheduled-hint"
@@ -866,43 +1208,48 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 					</div>
 
 					<div className="editor-actions" role="toolbar" aria-label="Post actions">
-						<div className="preview-group">
-							<select
-								value={previewMode}
-								onChange={e =>
-									setPreviewMode(e.target.value as PreviewMemberStatus)
-								}
-								aria-label="Preview member status"
-								title="Preview as member tier"
-								data-testid="preview-mode-select"
-							>
-								<option value="default">Preview: Default</option>
-								<option value="anonymous">As Visitor</option>
-								<option value="free">As Free Member</option>
-								<option value="paid">As Paid Member</option>
-							</select>
-							<button
-								type="button"
-								className="editor-action"
-								onClick={handleInAppPreview}
-								title="Open in-app preview window"
-								data-testid="preview-window-button"
-							>
-								Preview
-							</button>
-							<button
-								type="button"
-								className="editor-icon-button"
-								onClick={handleBrowserPreview}
-								title="Open preview in default browser"
-								aria-label="Open preview in default browser"
-								data-testid="preview-browser-button"
-							>
-								↗
-							</button>
-						</div>
+						{post && (
+							<div className="preview-group">
+								<select
+									value={previewMode}
+									onChange={e =>
+										setPreviewMode(
+											e.target.value as PreviewMemberStatus,
+										)
+									}
+									aria-label="Preview member status"
+									title="Preview as member tier"
+									data-testid="preview-mode-select"
+								>
+									<option value="default">Preview: Default</option>
+									<option value="anonymous">As Visitor</option>
+									<option value="free">As Free Member</option>
+									<option value="paid">As Paid Member</option>
+								</select>
+								<button
+									type="button"
+									className="editor-action"
+									onClick={handleInAppPreview}
+									title="Open in-app preview window"
+									data-testid="preview-window-button"
+								>
+									Preview
+								</button>
+								<button
+									type="button"
+									className="editor-icon-button"
+									onClick={handleBrowserPreview}
+									title="Open preview in default browser"
+									aria-label="Open preview in default browser"
+									data-testid="preview-browser-button"
+								>
+									↗
+								</button>
+							</div>
+						)}
 
-						{canPublish &&
+						{post &&
+							canPublish &&
 							(post.status === "published" || post.status === "sent" ? (
 								<button
 									type="button"
@@ -943,45 +1290,65 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 								</button>
 							))}
 
-						<button
-							type="button"
-							className={
-								drawer === "revisions"
-									? "editor-icon-button is-active"
-									: "editor-icon-button"
-							}
-							onClick={() =>
-								setDrawer(current =>
-									current === "revisions" ? "none" : "revisions",
-								)
-							}
-							title="Toggle post history"
-							aria-label="Toggle post history"
-							aria-pressed={drawer === "revisions"}
-							data-testid="toggle-revisions-button"
-						>
-							<HistoryIcon />
-						</button>
+						{isScrapMode && (
+							<button
+								type="button"
+								className="editor-action editor-action-publish editor-action-promote"
+								onClick={() => void handlePromoteScrap()}
+								disabled={publishing || isReadOnly}
+								data-testid="promote-scrap-button"
+							>
+								{publishing ? "Promoting…" : "🚀 Promote to Draft"}
+							</button>
+						)}
 
-						<button
-							type="button"
-							className={
-								drawer === "settings"
-									? "editor-icon-button is-active"
-									: "editor-icon-button"
-							}
-							onClick={() =>
-								setDrawer(current =>
-									current === "settings" ? "none" : "settings",
-								)
-							}
-							title="Toggle post settings sidebar"
-							aria-label="Toggle post settings sidebar"
-							aria-pressed={drawer === "settings"}
-							data-testid="toggle-sidebar-button"
-						>
-							<SidebarIcon />
-						</button>
+						{post && (
+							<>
+								<button
+									type="button"
+									className={
+										drawer === "revisions"
+											? "editor-icon-button is-active"
+											: "editor-icon-button"
+									}
+									onClick={() =>
+										setDrawer(current =>
+											current === "revisions"
+												? "none"
+												: "revisions",
+										)
+									}
+									title="Toggle post history"
+									aria-label="Toggle post history"
+									aria-pressed={drawer === "revisions"}
+									data-testid="toggle-revisions-button"
+								>
+									<HistoryIcon />
+								</button>
+
+								<button
+									type="button"
+									className={
+										drawer === "settings"
+											? "editor-icon-button is-active"
+											: "editor-icon-button"
+									}
+									onClick={() =>
+										setDrawer(current =>
+											current === "settings"
+												? "none"
+												: "settings",
+										)
+									}
+									title="Toggle post settings sidebar"
+									aria-label="Toggle post settings sidebar"
+									aria-pressed={drawer === "settings"}
+									data-testid="toggle-sidebar-button"
+								>
+									<SidebarIcon />
+								</button>
+							</>
+						)}
 					</div>
 				</header>
 
@@ -1033,7 +1400,11 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 							<div className="banner-actions">
 								<button
 									type="button"
-									onClick={() => saverRef.current?.flush()}
+									onClick={() =>
+										isScrapMode
+											? void flushScrapSave()
+											: saverRef.current?.flush()
+									}
 									data-testid="retry-save-button"
 								>
 									Retry save
@@ -1063,7 +1434,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 						value={title}
 						onChange={e => handleTitle(e.target.value)}
 						readOnly={isReadOnly}
-						placeholder="Post title"
+						placeholder={isScrapMode ? "Scrap title" : "Post title"}
 						data-testid="title-input"
 					/>
 
@@ -1092,7 +1463,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 						renderEditorFallback(editorError)
 					) : (
 						<EditorErrorBoundary
-							key={`${post.id}-${editorVersion}`}
+							key={`${documentId}-${editorVersion}`}
 							fallback={renderEditorFallback}
 							onCatch={message => {
 								editorErrorRef.current = true;
@@ -1109,7 +1480,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 								onCompositionStartCapture={markInteraction}
 							>
 								<KoenigComposer
-									initialEditorState={post.lexical}
+									initialEditorState={initialLexical}
 									darkMode={isDark}
 									fileUploader={fileUploader}
 									cardConfig={cardConfig}
@@ -1132,14 +1503,18 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 							? "editor-word-count with-sidebar"
 							: "editor-word-count"
 					}
-					title="Cmd+S saves a revision"
+					title={
+						isScrapMode
+							? "Saved automatically on this Mac"
+							: "Cmd+S saves a revision"
+					}
 					data-testid="word-count"
 				>
 					{wordCount.toLocaleString()} {wordCount === 1 ? "word" : "words"}
 				</div>
 			</div>
 
-			{drawer === "settings" && (
+			{post && drawer === "settings" && (
 				<MetadataSidebar
 					site={site}
 					postId={post.id}
@@ -1151,12 +1526,15 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 					onOpenRevisions={() => setDrawer("revisions")}
 					onChange={handleMetaChange}
 					onDeletePost={handleDeletePost}
+					onDemoteToScrap={handleDemoteToScrap}
+					canDemoteToScrap={post.status === "draft"}
+					demotingToScrap={demoting}
 					onClose={() => setDrawer("none")}
 					readOnly={isReadOnly}
 				/>
 			)}
 
-			{drawer === "revisions" && (
+			{post && drawer === "revisions" && (
 				<RevisionsDrawer
 					revisions={post.post_revisions ?? []}
 					readOnly={isReadOnly}
@@ -1165,7 +1543,7 @@ export default function Editor({site, postId, onBack, onReconnect}: Props) {
 				/>
 			)}
 
-			{publishModalOpen && (
+			{post && publishModalOpen && (
 				<PublishModal
 					site={site}
 					postTitle={title}
