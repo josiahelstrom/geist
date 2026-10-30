@@ -59,7 +59,7 @@ has been found, but no private key."
 The `.app`, updater archive and `.dmg` land in:
 - `src-tauri/target/release/bundle/macos/Geist.app`
 - `src-tauri/target/release/bundle/macos/Geist.app.tar.gz` (plus `.sig`)
-- `src-tauri/target/release/bundle/dmg/Geist_1.0.0-rc.1_aarch64.dmg`
+- `src-tauri/target/release/bundle/dmg/Geist_1.0.0-rc.2_aarch64.dmg`
 
 Release builds always carry the updater signature. macOS code signing depends on
 the environment: `bundle.macOS.signingIdentity` is `"-"`, so a plain local build
@@ -71,7 +71,7 @@ the required GitHub secrets and the tag flow are documented in
 
 ## First launch
 
-`v1.0.0-rc.1` is ad-hoc signed and not notarized, so macOS Gatekeeper warns on
+`v1.0.0-rc.2` is ad-hoc signed and not notarized, so macOS Gatekeeper warns on
 first launch ("Apple could not verify ..."). To open the app, right-click
 (Control-click) it and choose **Open**, then confirm. The same can be done from
 Terminal after dragging it to `/Applications`:
@@ -120,7 +120,7 @@ Deliberate safety rules, each covered by a test:
   contains an unknown Lexical node, an error boundary catches it and offers
   "Open in Ghost Admin ↗" instead of blanking the editor.
 
-v1.0.0-rc.1 "Release Candidate" makes Geist installable and self-updating. macOS
+v1.0.0-rc.2 "Release Candidate" makes Geist installable and self-updating. macOS
 builds ship as a DMG plus a signed updater archive; the RC is ad-hoc signed and
 not notarized, so first launch goes through the Gatekeeper prompt described in
 [First launch](#first-launch). Developer ID signing and notarization land at GA.
@@ -130,7 +130,7 @@ updates are verified against the public key embedded in the bundle. Windows buil
 by `.github/workflows/release.yml` from a `v*` tag; keys, secrets and the tag flow are
 in [`docs/releasing.md`](./docs/releasing.md). The RC is published as a normal
 (non-prerelease) GitHub Release so `releases/latest/download/latest.json` resolves and
-installed builds can update; `v1.0.0-rc.1` is an RC by version number and by the
+installed builds can update; `v1.0.0-rc.2` is an RC by version number and by the
 `releaseDraft` gate, not by GitHub's prerelease flag.
 
 v0.8.1 "Maintenance" hardens edge cases identified during wide-level code review.
@@ -149,7 +149,7 @@ because Ghost cannot be reached, the single-flight saver keeps your edits, repor
 `status: "offline"`, and writes the still-unsaved patch to the cache instead of
 discarding it. On reconnect the app replays any dirty patches automatically; a `409`
 still halts the saver rather than clobbering the server copy. This milestone completes
-the feature set; `v1.0.0-rc.1` followed with packaging, the auto-updater and ad-hoc
+the feature set; `v1.0.0-rc.2` followed with packaging, the auto-updater and ad-hoc
 Apple code signing, with Developer ID signing and notarization pending for GA.
 
 v0.7.0 "Scraps" adds a local-first private scratchpad. A scrap is a note that lives

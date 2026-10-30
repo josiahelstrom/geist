@@ -1,7 +1,7 @@
 # Builds and publishes signed Geist release artifacts on tags matching `v*`.
 #
 # `tauri-action` builds each target, uploads the bundle (`.app.tar.gz`, `.dmg`,
-# `.msi`/`.exe`), uploads the updater signature (`.sig`) next to each updater
+# `.exe`), uploads the updater signature (`.sig`) next to each updater
 # archive, and merges every target's signature into a single `latest.json`
 # manifest that installed apps poll from
 # https://github.com/josiahelstrom/geist/releases/latest/download/latest.json.
@@ -109,8 +109,16 @@ jobs:
           releaseBody: |
             Geist v__VERSION__.
 
-            macOS builds are signed with a Developer ID certificate and notarized
-            by Apple. Windows builds use the WebView2 runtime.
+            Supports Ghost 5.0 through 6.73, bundling the editor that ships
+            with Ghost 6.73.
+
+            macOS builds are ad-hoc signed but not notarized yet, so macOS warns
+            about an unverified developer on first launch. Right-click the app
+            and choose Open, or run:
+              xattr -dr com.apple.quarantine /Applications/Geist.app
+            Developer ID signing and notarization arrive in v1.0.0 GA.
+
+            Windows builds use the WebView2 runtime.
 
             Installed copies update themselves from this release. The updater
             manifest is available at:

@@ -134,8 +134,8 @@ the cdhash on every rebuild and breaks the Keychain ACL.
 
 | Concern | Implementation |
 |---|---|
-| macOS signing | Developer ID Application certificate; hardened runtime; `APPLE_SIGNING_IDENTITY` |
-| Notarization | Apple notary service via `APPLE_ID` / `APPLE_PASSWORD` (app-specific) / `APPLE_TEAM_ID` |
+| macOS signing | Developer ID Application certificate when `APPLE_*` secrets are provisioned; otherwise ad-hoc (`signingIdentity: "-"`); hardened runtime |
+| Notarization | Apple notary service via `APPLE_ID` / `APPLE_PASSWORD` (app-specific) / `APPLE_TEAM_ID`; not yet active — rc builds ship ad-hoc signed and un-notarized |
 | Updater archive | `bundle.createUpdaterArtifacts` produces `Geist.app.tar.gz` plus a detached `.sig` |
 | Update client | `tauri-plugin-updater` checks, downloads and verifies; `tauri-plugin-process` restarts |
 | Manifest | `latest.json` merged per platform and uploaded to the GitHub Release by `tauri-action` |
@@ -161,7 +161,7 @@ as the `TAURI_SIGNING_PRIVATE_KEY` secret and in the maintainer's password manag
 | `v0.7.0 Scraps` | **Shipped** | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
 | `v0.8.0 Feature Complete` | **Shipped** | Offline draft cache (`draft_cache.json`), `offline` save status, offline editing from cached copies, automatic replay of dirty patches on reconnect |
 | `v0.8.1 Maintenance` | **Shipped** | Code review hardening: conflict overwrite preservation, scrap mode close guard, titlebar status mirror, promote idempotency, forget site cache purge |
-| `v1.0.0-rc.1 Release Candidate` | **Shipped / Current** | Apple Developer ID signing & notarization, `tauri-plugin-updater` with GitHub Releases, DMG & updater artifacts, Windows/WebView2 build |
+| `v1.0.0-rc.2 Release Candidate` | **Shipped / Current** | Ad-hoc macOS signing (not notarized), `tauri-plugin-updater` with GitHub Releases, DMG & updater artifacts, Windows/WebView2 build |
 | `v1.0.0 General Availability` | **Next Up** | First official public release, Homebrew cask |
 
 ### Milestone detail
@@ -208,9 +208,12 @@ flushes on window close requests; titlebar save status mirrors local scraps; pro
 reuses existing drafts across retries to prevent duplicate Ghost posts; forgetting a site
 purges its cached drafts and scraps from disk; and opener actions catch unhandled rejections.
 
-**v1.0.0-rc.1 (shipped, current).** Distribution. macOS bundles are signed with an
-Apple Developer ID certificate and notarized, and ship as a DMG plus a signed updater
-archive; Windows builds use WebView2. `tauri-plugin-updater` reads `latest.json` from
+**v1.0.0-rc.2 (current).** Distribution. macOS bundles are ad-hoc signed
+(`bundle.macOS.signingIdentity: "-"`) but not notarized, so first launch shows the
+Gatekeeper "unverified developer" prompt (right-click → Open, or the
+`xattr -dr com.apple.quarantine` workaround); Developer ID signing and notarization
+are the GA work item. Bundles ship as a DMG plus a signed updater archive; Windows
+builds use WebView2. `tauri-plugin-updater` reads `latest.json` from
 GitHub Releases and `tauri-plugin-process` restarts the app after an in-place install.
 Releases are built by `.github/workflows/release.yml` on a `v*` tag and stay drafts
 until verified. See [`releasing.md`](./releasing.md).
