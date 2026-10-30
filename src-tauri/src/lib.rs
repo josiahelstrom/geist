@@ -671,18 +671,23 @@ fn open_preview_window(
         return Ok(());
     }
 
-    tauri::WebviewWindowBuilder::new(
+    #[allow(unused_mut)]
+    let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
         PREVIEW_WINDOW_LABEL,
         tauri::WebviewUrl::External(parsed),
     )
     .title(&window_title)
     .inner_size(1040.0, 780.0)
-    .min_inner_size(480.0, 360.0)
-    // External preview pages keep the standard titlebar / window chrome.
-    .title_bar_style(tauri::TitleBarStyle::Visible)
-    .build()
-    .map_err(|e| e.to_string())?;
+    .min_inner_size(480.0, 360.0);
+
+    // External preview pages keep standard titlebar on macOS; Windows uses native frame by default.
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.title_bar_style(tauri::TitleBarStyle::Visible);
+    }
+
+    builder.build().map_err(|e| e.to_string())?;
 
     Ok(())
 }
