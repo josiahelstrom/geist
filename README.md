@@ -61,9 +61,27 @@ The `.app`, updater archive and `.dmg` land in:
 - `src-tauri/target/release/bundle/macos/Geist.app.tar.gz` (plus `.sig`)
 - `src-tauri/target/release/bundle/dmg/Geist_1.0.0-rc.1_aarch64.dmg`
 
-Release builds are signed with an Apple Developer ID certificate, notarized, and
-carry the updater signature. The key, the required GitHub secrets and the tag
-flow are documented in [`docs/releasing.md`](./docs/releasing.md).
+Release builds always carry the updater signature. macOS code signing depends on
+the environment: `bundle.macOS.signingIdentity` is `"-"`, so a plain local build
+is ad-hoc signed, and `APPLE_SIGNING_IDENTITY` (set by the release workflow when
+the `APPLE_CERTIFICATE` secret exists) overrides it with a real Developer ID
+identity. Notarization only runs once the Apple secrets are provisioned. The key,
+the required GitHub secrets and the tag flow are documented in
+[`docs/releasing.md`](./docs/releasing.md).
+
+## First launch
+
+`v1.0.0-rc.1` is ad-hoc signed and not notarized, so macOS Gatekeeper warns on
+first launch ("Apple could not verify ..."). To open the app, right-click
+(Control-click) it and choose **Open**, then confirm. The same can be done from
+Terminal after dragging it to `/Applications`:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Geist.app
+```
+
+Notarization is pending. GA will be signed with an Apple Developer ID certificate
+and notarized once the certificate is provisioned.
 
 ## How it works
 
@@ -103,11 +121,12 @@ Deliberate safety rules, each covered by a test:
   "Open in Ghost Admin ↗" instead of blanking the editor.
 
 v1.0.0-rc.1 "Release Candidate" makes Geist installable and self-updating. macOS
-builds are signed with an Apple Developer ID certificate and notarized, so they launch
-without Gatekeeper warnings, and ship as a DMG plus a signed updater archive. Installed
-apps poll the GitHub Releases `latest.json` manifest and update themselves in place
-through `tauri-plugin-updater` and `tauri-plugin-process`; updates are verified against
-the public key embedded in the bundle. Windows builds use WebView2. Releases are built
+builds ship as a DMG plus a signed updater archive; the RC is ad-hoc signed and
+not notarized, so first launch goes through the Gatekeeper prompt described in
+[First launch](#first-launch). Developer ID signing and notarization land at GA.
+Installed apps poll the GitHub Releases `latest.json` manifest and update
+themselves in place through `tauri-plugin-updater` and `tauri-plugin-process`;
+updates are verified against the public key embedded in the bundle. Windows builds use WebView2. Releases are built
 by `.github/workflows/release.yml` from a `v*` tag; keys, secrets and the tag flow are
 in [`docs/releasing.md`](./docs/releasing.md). The RC is published as a normal
 (non-prerelease) GitHub Release so `releases/latest/download/latest.json` resolves and
@@ -130,8 +149,8 @@ because Ghost cannot be reached, the single-flight saver keeps your edits, repor
 `status: "offline"`, and writes the still-unsaved patch to the cache instead of
 discarding it. On reconnect the app replays any dirty patches automatically; a `409`
 still halts the saver rather than clobbering the server copy. This milestone completes
-the feature set; `v1.0.0-rc.1` followed with Apple code signing, notarization, the
-auto-updater and packaging.
+the feature set; `v1.0.0-rc.1` followed with packaging, the auto-updater and ad-hoc
+Apple code signing, with Developer ID signing and notarization pending for GA.
 
 v0.7.0 "Scraps" adds a local-first private scratchpad. A scrap is a note that lives
 only on this Mac: it is written to `scraps.json` through `tauri-plugin-store`, keyed per

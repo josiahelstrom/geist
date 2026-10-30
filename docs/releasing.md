@@ -42,6 +42,11 @@ Set these under **Settings → Secrets and variables → Actions**.
 `GITHUB_TOKEN` is provided by Actions and needs `contents: write`, which
 `.github/workflows/release.yml` already grants.
 
+Until the Apple secrets (`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
+`APPLE_SIGNING_IDENTITY`) exist, the workflow imports no certificate and the
+macOS artifacts are ad-hoc signed; see "Unsigned / ad-hoc release candidate"
+below.
+
 ## Local signing build
 
 To produce a signed local build with the same key:
@@ -56,8 +61,50 @@ a path to the key file. `TAURI_SIGNING_PRIVATE_KEY_PATH` is read only by
 "A public key has been found, but no private key."
 
 Apple signing and notarization are picked up from the same `APPLE_*` environment
-variables if you have them exported; without them the build is still signed for
-the updater but not notarized.
+variables if you have them exported.
+
+`bundle.macOS.signingIdentity` in `src-tauri/tauri.conf.json` is set to `"-"`, so
+builds are **ad-hoc signed out of the box**: they install and run, but carry no
+Developer ID identity and are not notarized. `APPLE_SIGNING_IDENTITY` overrides
+that value, and in CI the release workflow sets it when the `APPLE_CERTIFICATE`
+secret exists, which produces a real Developer ID signature. Without those
+variables the build is still signed for the updater, but not for Apple.
+
+### Unsigned / ad-hoc release candidate
+
+`v1.0.0-rc.1` was built before a Developer ID certificate was provisioned, so its
+artifacts are ad-hoc signed and not notarized. They are installable, but:
+
+- Gatekeeper prompts on first launch with "Apple could not verify ...". This is
+  the expected behavior now that the bundle is ad-hoc signed; before that, an
+  unsigned arm64 bundle failed validation outright with "Geist is damaged and
+  can't be opened".
+- Testers can right-click (Control-click) the app and choose **Open**, or clear
+  the quarantine flag after dragging it to `/Applications`:
+
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/Geist.app
+  ```
+
+- **Installed apps will not receive future updates unless the same signing
+  identity is preserved.** An ad-hoc signature gives the bundle no stable code
+  identity, so an app installed from this RC cannot update in place to a build
+  signed with a different identity. GA must therefore be signed with a real
+  Developer ID certificate (`APPLE_CERTIFICATE` + `APPLE_SIGNING_IDENTITY`) so
+  existing users update rather than reinstall by hand.
+
+To correct a broken artifact, delete the tag and the draft release assets, then
+publish again from a fixed commit:
+
+```bash
+git tag -d v1.0.0-rc.1
+git push origin :refs/tags/v1.0.0-rc.1
+```
+
+Delete the draft release (or its stale assets) on GitHub before re-running the
+workflow with the tag. Assets are not replaced in place: `releases/latest` and
+the tag-pinned URLs both resolve through the release, so a partially overwritten
+release can serve mismatched artifacts and `latest.json` signatures.
 
 ## Cutting a release
 

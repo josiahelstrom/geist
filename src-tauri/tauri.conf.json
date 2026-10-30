@@ -40,7 +40,8 @@
     "shortDescription": "A native desktop editor for Ghost publications",
     "longDescription": "Geist is a native macOS editor for Ghost blogs with a three-pane layout, offline draft caching, local scraps, and one-click publishing.",
     "macOS": {
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
     },
     "windows": {
       "webviewInstallMode": {
