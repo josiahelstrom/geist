@@ -1,6 +1,6 @@
 [package]
 name = "geist"
-version = "0.8.1"
+version = "1.0.0-rc.1"
 description = "Geist — Desktop editor for Ghost publications"
 authors = ["Josiah Elstrom"]
 edition = "2024"
@@ -29,6 +29,8 @@ hmac = "0.12"
 sha2 = "0.10"
 base64 = "0.22"
 tauri-plugin-store = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "cookies"] }
 parking_lot = "0.12"
 uuid = { version = "1", features = ["v4"] }

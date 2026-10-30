@@ -14,7 +14,12 @@
 	display: flex;
 	flex-direction: column;
 	width: var(--inspector-width);
-	height: calc(100vh - var(--titlebar-height));
+	/* Fill the editor grid row, not the viewport: the update banner sits above
+	 * `.app-shell-body` and shrinks it, so a `100vh` height would overflow the
+	 * shell and clip the bottom of the drawer. */
+	height: 100%;
+	align-self: stretch;
+	min-height: 0;
 	position: sticky;
 	top: 0;
 	gap: 0;

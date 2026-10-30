@@ -1,7 +1,7 @@
 {
   "name": "geist",
   "private": true,
-  "version": "0.8.1",
+  "version": "1.0.0-rc.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,7 +19,9 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-http": "^2.8.3",
     "@tauri-apps/plugin-opener": "^2.7.2",
+    "@tauri-apps/plugin-process": "^2.4.0",
     "@tauri-apps/plugin-store": "^2.5.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "@tryghost/koenig-lexical": "1.11.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

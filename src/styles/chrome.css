@@ -35,8 +35,12 @@
 	min-height: 100%;
 }
 
+/* The drawer is sized by the shell body, so the update banner above it cannot
+ * push its bottom past the clipped edge of the body. */
 .app-shell-body .meta-sidebar {
-	height: calc(100vh - var(--titlebar-height));
+	height: 100%;
+	align-self: stretch;
+	min-height: 0;
 }
 
 /* ---------------------------------------------------------------------------
@@ -269,5 +273,161 @@
 @media (max-width: 1023px) {
 	.titlebar-save {
 		display: none;
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * Update banner
+ *
+ * A quiet glass strip pinned under the overlay titlebar. It sits in the app
+ * shell's flex column, so the panes below shrink instead of sliding under it.
+ * ------------------------------------------------------------------------- */
+
+.update-banner {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-4);
+	flex: none;
+	margin: var(--space-2) var(--space-3) 0;
+	padding: var(--space-3) var(--space-4);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-lg);
+	background: var(--bg-glass-pill);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+	box-shadow: var(--shadow-card);
+	-webkit-app-region: no-drag;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.update-banner-copy {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.update-banner-title {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	line-height: 1.3;
+	color: var(--fg-primary);
+}
+
+.update-banner-meta {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--fg-secondary);
+}
+
+.update-banner-notes {
+	margin: var(--space-1) 0 0;
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--fg-muted);
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+}
+
+.update-banner-error {
+	color: var(--status-danger);
+	font-weight: 600;
+}
+
+.update-banner-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex: none;
+}
+
+.update-banner-actions button {
+	height: var(--control-height-compact);
+	padding: 0 var(--space-3);
+	border: 1px solid transparent;
+	border-radius: var(--radius-md);
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1;
+	white-space: nowrap;
+	cursor: default;
+	transition:
+		background-color var(--motion-duration) var(--motion-ease),
+		opacity var(--motion-duration) var(--motion-ease);
+}
+
+.update-banner-actions button[data-variant="primary"] {
+	border-color: var(--accent-primary-bg);
+	background: var(--accent-primary-bg);
+	color: var(--accent-primary-fg);
+}
+
+.update-banner-actions button[data-variant="primary"]:hover:not(:disabled) {
+	opacity: 0.9;
+}
+
+.update-banner-actions button[data-variant="secondary"] {
+	border-color: var(--border-default);
+	background: transparent;
+	color: var(--fg-primary);
+}
+
+.update-banner-actions button[data-variant="secondary"]:hover:not(:disabled) {
+	background: var(--bg-row-hover);
+}
+
+.update-banner-actions button:disabled {
+	opacity: 0.5;
+}
+
+.update-banner-progress {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	margin-top: var(--space-1);
+	font-size: 11px;
+	line-height: 1;
+	color: var(--fg-secondary);
+}
+
+.update-banner-progress-label {
+	flex: none;
+}
+
+.update-banner-progress-track {
+	position: relative;
+	flex: 1 1 auto;
+	height: 3px;
+	overflow: hidden;
+	border-radius: var(--radius-pill);
+	background: var(--bg-row-selected);
+}
+
+.update-banner-progress-bar {
+	height: 100%;
+	border-radius: var(--radius-pill);
+	background: var(--accent-primary-bg);
+	transition: width var(--motion-duration) var(--motion-ease);
+}
+
+.update-banner-progress-bar[data-indeterminate="true"] {
+	width: 35%;
+	animation: update-banner-indeterminate 1200ms var(--motion-ease) infinite;
+}
+
+@keyframes update-banner-indeterminate {
+	0% {
+		transform: translateX(-100%);
+	}
+
+	100% {
+		transform: translateX(300%);
 	}
 }

@@ -32,9 +32,9 @@ Override the signing identity with `GEIST_SIGN_IDENTITY` if yours differs.
 ## Checks
 
 ```bash
-npm run check        # tsc --noEmit + 217 unit tests
-npm run test:rust    # keyring round-trip, HTTP scope, preview URL guard, JWT minting,
-                     # staff login/2FA handling
+npm run check        # tsc --noEmit + 217 frontend tests
+npm run test:rust    # 29 Rust tests: keyring round-trip, HTTP scope, preview URL guard,
+                     # JWT minting, staff login/2FA handling
 ```
 
 End-to-end auth tests run against a real site. Credentials come from the environment
@@ -49,12 +49,21 @@ GEIST_TEST_KEY=id:hex \
 ## Building
 
 ```bash
-npm run tauri build
+TAURI_SIGNING_PRIVATE_KEY=~/.tauri/geist.key npm run tauri build
 ```
 
-The `.app` and `.dmg` land in:
+`bundle.createUpdaterArtifacts` is enabled, so the build always signs the updater
+archive: a plain `npm run tauri build` fails at the signing step with "A public key
+has been found, but no private key."
+
+The `.app`, updater archive and `.dmg` land in:
 - `src-tauri/target/release/bundle/macos/Geist.app`
-- `src-tauri/target/release/bundle/dmg/Geist_0.8.1_aarch64.dmg`
+- `src-tauri/target/release/bundle/macos/Geist.app.tar.gz` (plus `.sig`)
+- `src-tauri/target/release/bundle/dmg/Geist_1.0.0-rc.1_aarch64.dmg`
+
+Release builds are signed with an Apple Developer ID certificate, notarized, and
+carry the updater signature. The key, the required GitHub secrets and the tag
+flow are documented in [`docs/releasing.md`](./docs/releasing.md).
 
 ## How it works
 
@@ -93,6 +102,18 @@ Deliberate safety rules, each covered by a test:
   contains an unknown Lexical node, an error boundary catches it and offers
   "Open in Ghost Admin ↗" instead of blanking the editor.
 
+v1.0.0-rc.1 "Release Candidate" makes Geist installable and self-updating. macOS
+builds are signed with an Apple Developer ID certificate and notarized, so they launch
+without Gatekeeper warnings, and ship as a DMG plus a signed updater archive. Installed
+apps poll the GitHub Releases `latest.json` manifest and update themselves in place
+through `tauri-plugin-updater` and `tauri-plugin-process`; updates are verified against
+the public key embedded in the bundle. Windows builds use WebView2. Releases are built
+by `.github/workflows/release.yml` from a `v*` tag; keys, secrets and the tag flow are
+in [`docs/releasing.md`](./docs/releasing.md). The RC is published as a normal
+(non-prerelease) GitHub Release so `releases/latest/download/latest.json` resolves and
+installed builds can update; `v1.0.0-rc.1` is an RC by version number and by the
+`releaseDraft` gate, not by GitHub's prerelease flag.
+
 v0.8.1 "Maintenance" hardens edge cases identified during wide-level code review.
 Conflict resolution preserves edits typed while the 409 collision banner is displayed;
 scrap mode intercepts window close requests to prompt and flush unsaved local edits;
@@ -109,8 +130,8 @@ because Ghost cannot be reached, the single-flight saver keeps your edits, repor
 `status: "offline"`, and writes the still-unsaved patch to the cache instead of
 discarding it. On reconnect the app replays any dirty patches automatically; a `409`
 still halts the saver rather than clobbering the server copy. This milestone completes
-the feature set — the next milestone is `v1.0.0-rc.1` (Release Candidate), covering
-Apple code signing, notarization, the auto-updater and packaging.
+the feature set; `v1.0.0-rc.1` followed with Apple code signing, notarization, the
+auto-updater and packaging.
 
 v0.7.0 "Scraps" adds a local-first private scratchpad. A scrap is a note that lives
 only on this Mac: it is written to `scraps.json` through `tauri-plugin-store`, keyed per

@@ -18,12 +18,18 @@ import {
 } from "./lib/sites";
 import type {SaveStatus} from "./lib/saver";
 import {listScraps, type Scrap} from "./lib/scraps";
+import {
+	checkForUpdate,
+	hasTauriRuntime,
+	type UpdateInfo,
+} from "./lib/updater";
 import Connect from "./components/Connect";
 import NavigationRail from "./components/NavigationRail";
 import PostList from "./components/PostList";
 import Editor from "./components/Editor";
 import ScrapsList from "./components/ScrapsList";
 import TitleBar from "./components/TitleBar";
+import UpdateBanner from "./components/UpdateBanner";
 
 type View =
 	| {name: "connect"}
@@ -89,6 +95,8 @@ export default function App() {
 	const [inspectorOpen, setInspectorOpen] = useState(false);
 	const [postFilter, setPostFilter] = useState<PostStatusFilter>("draft");
 	const [postQuery, setPostQuery] = useState("");
+	const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+	const [updateDismissed, setUpdateDismissed] = useState(false);
 
 	// Apply the saved theme on boot and keep "system" in sync with the OS.
 	useEffect(() => {
@@ -107,6 +115,33 @@ export default function App() {
 
 		media.addEventListener("change", onSystemThemeChange);
 		return () => media.removeEventListener("change", onSystemThemeChange);
+	}, []);
+
+	// Check for a new release once per session, a few seconds after launch so
+	// the update request never competes with the first paint or site hydration.
+	useEffect(() => {
+		if (!hasTauriRuntime() || updateDismissed) {
+			return;
+		}
+
+		let cancelled = false;
+		const timer = window.setTimeout(() => {
+			void checkForUpdate().then(info => {
+				if (!cancelled && info) {
+					setUpdateInfo(info);
+				}
+			});
+		}, 4000);
+
+		return () => {
+			cancelled = true;
+			window.clearTimeout(timer);
+		};
+	}, [updateDismissed]);
+
+	const dismissUpdate = useCallback(() => {
+		setUpdateInfo(null);
+		setUpdateDismissed(true);
 	}, []);
 
 	// Restore the last session from local cache first, then hydrate from
@@ -462,6 +497,10 @@ export default function App() {
 		/>
 	);
 
+	const updateBanner = updateInfo ? (
+		<UpdateBanner update={updateInfo} onDismiss={dismissUpdate} />
+	) : null;
+
 	if (route.name === "connect" || !site) {
 		return (
 			<Connect
@@ -482,6 +521,7 @@ export default function App() {
 				data-sidebar={sidebarOpen ? "open" : "collapsed"}
 			>
 				{titleBar}
+				{updateBanner}
 				<div className="app-shell-body app-shell-body-split">
 					<div
 						className="app-layout"
@@ -543,6 +583,7 @@ export default function App() {
 			data-sidebar={sidebarOpen ? "open" : "collapsed"}
 		>
 			{titleBar}
+			{updateBanner}
 			<div className="app-shell-body">
 				{route.name === "scrap-editor" && activeScrapId ? (
 					<Editor

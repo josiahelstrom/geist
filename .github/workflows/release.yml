@@ -1,0 +1,101 @@
+# Builds and publishes signed Geist release artifacts on tags matching `v*`.
+#
+# `tauri-action` builds each target, uploads the bundle (`.app.tar.gz`, `.dmg`,
+# `.msi`/`.exe`), uploads the updater signature (`.sig`) next to each updater
+# archive, and merges every target's signature into a single `latest.json`
+# manifest that installed apps poll from
+# https://github.com/josiahelstrom/geist/releases/latest/download/latest.json.
+#
+# Releases are published as normal, non-prerelease releases — RC and GA alike.
+# `/releases/latest/download/latest.json` resolves through GitHub's
+# `releases/latest` redirect, which excludes prereleases, so a release marked as
+# prerelease would be invisible to the updater and an installed build would
+# silently never see an update. Only mark a release as a prerelease if you also
+# switch `plugins.updater.endpoints` in `src-tauri/tauri.conf.json` to a
+# tag-pinned `.../download/v<version>/latest.json` URL.
+#
+# Releases are still created as drafts, so nothing is served until the draft is
+# published.
+name: Release
+
+"on":
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-tauri:
+    name: Publish (${{ matrix.target || matrix.platform }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            args: "--target aarch64-apple-darwin"
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            args: "--target x86_64-apple-darwin"
+          - platform: windows-latest
+            target: ""
+            args: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Check frontend
+        run: npm run check
+
+      - name: Build and publish
+        # This action runs with TAURI_SIGNING_PRIVATE_KEY in scope, so it is pinned to a commit SHA: a compromised mutable tag could publish validly-signed malicious updates that every installed app would accept.
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: v__VERSION__
+          releaseName: Geist v__VERSION__
+          releaseBody: |
+            Geist v__VERSION__.
+
+            macOS builds are signed with a Developer ID certificate and notarized
+            by Apple. Windows builds use the WebView2 runtime.
+
+            Installed copies update themselves from this release. The updater
+            manifest is available at:
+            https://github.com/josiahelstrom/geist/releases/latest/download/latest.json
+
+            See docs/releasing.md for the release process.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

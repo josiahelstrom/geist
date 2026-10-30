@@ -15,7 +15,7 @@ build plan, verified Ghost behaviours, corrections found while building — is p
 |---|---|
 | App / product name | Geist |
 | Bundle ID | `app.geist.desktop` |
-| Platform | macOS (native Tauri v2 shell) |
+| Platform | macOS (native Tauri v2 shell); Windows build via WebView2 |
 | Supported Ghost | 5.0 – 6.68 |
 | Editor | `@tryghost/koenig-lexical` (pinned 1.11.1) |
 | No Ghost branding | Ghost is a trademark; never place it in the name, icon or bundle id |
@@ -130,6 +130,25 @@ Business logic and API endpoints stay in TypeScript.
 Use `npm run app` (`scripts/dev.sh`), **not** `npm run tauri dev` — ad-hoc signing changes
 the cdhash on every rebuild and breaks the Keychain ACL.
 
+### Distribution & updates
+
+| Concern | Implementation |
+|---|---|
+| macOS signing | Developer ID Application certificate; hardened runtime; `APPLE_SIGNING_IDENTITY` |
+| Notarization | Apple notary service via `APPLE_ID` / `APPLE_PASSWORD` (app-specific) / `APPLE_TEAM_ID` |
+| Updater archive | `bundle.createUpdaterArtifacts` produces `Geist.app.tar.gz` plus a detached `.sig` |
+| Update client | `tauri-plugin-updater` checks, downloads and verifies; `tauri-plugin-process` restarts |
+| Manifest | `latest.json` merged per platform and uploaded to the GitHub Release by `tauri-action` |
+| Endpoint | `https://github.com/josiahelstrom/geist/releases/latest/download/latest.json` |
+| Trust anchor | `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`; private key lives outside the repo |
+
+`latest.json` is only served once a release is published — drafts are invisible to the
+updater endpoint. The workflow sets `prerelease: false`: GitHub's `releases/latest`
+excludes prereleases, so RC and GA both publish as regular releases, gated by draft
+status.
+The updater private key is never in the repository or the build output; it exists only
+as the `TAURI_SIGNING_PRIVATE_KEY` secret and in the maintainer's password manager.
+
 ---
 
 ## Official Version Roadmap
@@ -142,8 +161,8 @@ the cdhash on every rebuild and breaks the Keychain ACL.
 | `v0.7.0 Scraps` | **Shipped** | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
 | `v0.8.0 Feature Complete` | **Shipped** | Offline draft cache (`draft_cache.json`), `offline` save status, offline editing from cached copies, automatic replay of dirty patches on reconnect |
 | `v0.8.1 Maintenance` | **Shipped** | Code review hardening: conflict overwrite preservation, scrap mode close guard, titlebar status mirror, promote idempotency, forget site cache purge |
-| `v1.0.0-rc.1 Release Candidate` | **Next Up** | Apple code signing & notarization, `tauri-plugin-updater` with GitHub Releases, DMG & Windows installers |
-| `v1.0.0 General Availability` | Planned | First official public release |
+| `v1.0.0-rc.1 Release Candidate` | **Shipped / Current** | Apple Developer ID signing & notarization, `tauri-plugin-updater` with GitHub Releases, DMG & updater artifacts, Windows/WebView2 build |
+| `v1.0.0 General Availability` | **Next Up** | First official public release, Homebrew cask |
 
 ### Milestone detail
 
@@ -189,8 +208,12 @@ flushes on window close requests; titlebar save status mirrors local scraps; pro
 reuses existing drafts across retries to prevent duplicate Ghost posts; forgetting a site
 purges its cached drafts and scraps from disk; and opener actions catch unhandled rejections.
 
-**v1.0.0-rc.1 (next up).** Apple Developer ID signing and notarization,
-`tauri-plugin-updater` backed by GitHub Releases, DMG packaging, and Windows installer
-groundwork.
+**v1.0.0-rc.1 (shipped, current).** Distribution. macOS bundles are signed with an
+Apple Developer ID certificate and notarized, and ship as a DMG plus a signed updater
+archive; Windows builds use WebView2. `tauri-plugin-updater` reads `latest.json` from
+GitHub Releases and `tauri-plugin-process` restarts the app after an in-place install.
+Releases are built by `.github/workflows/release.yml` on a `v*` tag and stay drafts
+until verified. See [`releasing.md`](./releasing.md).
 
-**v1.0.0 GA.** First official public release.
+**v1.0.0 GA (next up).** First official public release: the same regular-release path
+as the RC, plus the Homebrew cask.
