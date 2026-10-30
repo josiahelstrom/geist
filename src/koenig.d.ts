@@ -1,6 +1,7 @@
 /**
  * Type declarations for @tryghost/koenig-lexical, which ships no types of its
- * own. Shapes here were read out of the 1.11.1 dist bundle, not guessed.
+ * own. Shapes here were derived from the dist bundle and re-checked against
+ * 1.13.1's exports, props, and style.css export, not guessed.
  */
 
 declare module "@tryghost/koenig-lexical" {

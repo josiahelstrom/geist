@@ -1,17 +1,19 @@
 /**
- * Ghost versions this build has been checked against (plan §10). This is a
- * stricter signal than the MIN/MAX range: it drives the banner copy only, not
- * whether editing is allowed.
+ * Ghost versions this build has been checked against (plan §10). 6.73 was
+ * established from Ghost's shipped Admin API and node schemas and the 1.13.1
+ * stylesheet, not by opening a 6.73 post in the editor. This is a stricter
+ * signal than the MIN/MAX range: it drives the banner copy only, not whether
+ * editing is allowed.
  */
-export const TESTED_GHOST = ["6.68"];
+export const TESTED_GHOST = ["6.68", "6.73"];
 
 /** The Koenig version this app bundles; pin it to the target site's version. */
-export const KOENIG_VERSION = "1.11.1";
+export const KOENIG_VERSION = "1.13.1";
 
 /** Oldest Ghost this Koenig build supports. */
 export const MIN_GHOST = "5.0";
 /** Newest Ghost this Koenig build supports; above it, editing is read-only. */
-export const MAX_GHOST = "6.68";
+export const MAX_GHOST = "6.73";
 
 export type VersionStatus =
 	| "tested"
@@ -22,7 +24,7 @@ export type VersionStatus =
 
 type ParsedVersion = [number, number, number];
 
-/** Ghost reports "6.68"; accept an optional patch segment defensively. */
+/** Ghost reports "6.73"; accept an optional patch segment defensively. */
 function parseVersion(version: string): ParsedVersion | null {
 	const match = /^(\d+)\.(\d+)(?:\.(\d+))?$/.exec(version.trim());
 	if (!match) {

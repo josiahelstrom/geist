@@ -115,7 +115,7 @@ Deliberate safety rules, each covered by a test:
   `?member_status=anonymous|free|paid` tier toggles. Site and theme HTML is never
   rendered inside the app's origin.
 - Ghost version compatibility is checked before editing. Below `MIN_GHOST` (`5.0`)
-  the app warns; above `MAX_GHOST` (`6.68`) the post is opened **read-only** unless you
+  the app warns; above `MAX_GHOST` (`6.73`) the post is opened **read-only** unless you
   explicitly override, because newer Ghost card schemas could be lost on save. If a post
   contains an unknown Lexical node, an error boundary catches it and offers
   "Open in Ghost Admin ↗" instead of blanking the editor.

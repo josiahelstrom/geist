@@ -16,8 +16,8 @@ build plan, verified Ghost behaviours, corrections found while building — is p
 | App / product name | Geist |
 | Bundle ID | `app.geist.desktop` |
 | Platform | macOS (native Tauri v2 shell); Windows build via WebView2 |
-| Supported Ghost | 5.0 – 6.68 |
-| Editor | `@tryghost/koenig-lexical` (pinned 1.11.1) |
+| Supported Ghost | 5.0 – 6.73 |
+| Editor | `@tryghost/koenig-lexical` (pinned 1.13.1) |
 | No Ghost branding | Ghost is a trademark; never place it in the name, icon or bundle id |
 
 Geist talks to any Ghost site — self-hosted, Ghost(Pro), or OCI-hosted — through the Admin
@@ -62,14 +62,14 @@ cannot be undone; treat the default as irreversible-action protection.
 
 ### Rule 4 — Ghost version compatibility policy
 
-`MIN_GHOST = 5.0`, `MAX_GHOST = 6.68` (`src/lib/version.ts`), matched to the bundled
+`MIN_GHOST = 5.0`, `MAX_GHOST = 6.73` (`src/lib/version.ts`), matched to the bundled
 Koenig build.
 
 | Site version | Behaviour |
 |---|---|
 | `< 5.0` | Warning banner; new card types may not render |
-| `5.0 – 6.68` | Editable |
-| `> 6.68` | **Enforced read-only**, with an explicit per-site user override |
+| `5.0 – 6.73` | Editable |
+| `> 6.73` | **Enforced read-only**, with an explicit per-site user override |
 | Unknown | Editable, with a warning banner |
 
 Posts containing unknown Lexical node types fail gracefully into an error boundary with an
@@ -85,7 +85,7 @@ React 18.3 + TypeScript + Vite, rendered inside the Tauri webview.
 
 | Area | Location |
 |---|---|
-| Editor canvas | `@tryghost/koenig-lexical` 1.11.1 (`KoenigComposer` / `KoenigEditor`) |
+| Editor canvas | `@tryghost/koenig-lexical` 1.13.1 (`KoenigComposer` / `KoenigEditor`) |
 | App shell | `src/App.tsx`, `src/components/TitleBar.tsx`, `NavigationRail.tsx`, `PostList.tsx` |
 | Metadata inspector | `src/components/MetadataSidebar.tsx` |
 | Publishing | `src/components/PublishModal.tsx`, `src/lib/posts.ts` |
