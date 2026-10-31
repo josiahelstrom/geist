@@ -8,9 +8,11 @@
  * quiet, rounded card chrome.
  */
 
-/* ---------------------------------------------------------------------------
- * Root
- * ------------------------------------------------------------------------- */
+/* Hide floating add-block (+) button for a distraction-free WYSIWYG experience;
+   all cards and blocks are invoked exclusively via slash (/) commands. */
+.koenig-lexical [data-kg-plus-button] {
+    display: none !important;
+}
 
 .koenig-lexical {
 	--kg-accent-color: var(--status-publish);

@@ -116,7 +116,6 @@ jobs:
             about an unverified developer on first launch. Right-click the app
             and choose Open, or run:
               xattr -dr com.apple.quarantine /Applications/Geist.app
-            Developer ID signing and notarization arrive in v1.0.0 GA.
 
             Windows builds use the WebView2 runtime.
 

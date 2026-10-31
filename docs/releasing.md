@@ -113,8 +113,8 @@ release can serve mismatched artifacts and `latest.json` signatures.
 2. Commit, then tag and push:
 
    ```bash
-   git tag v1.0.0-rc.2
-   git push origin v1.0.0-rc.2
+   git tag v1.0.0
+   git push origin v1.0.0
    ```
 
 3. The tag triggers `.github/workflows/release.yml`, which builds

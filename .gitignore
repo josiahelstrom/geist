@@ -38,3 +38,8 @@ keys.env
 
 # Local Ghost
 ghost-test-env/*
+
+# Local reference materials and editor skills
+docs/ref/
+skills/
+

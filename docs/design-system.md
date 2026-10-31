@@ -311,8 +311,10 @@ Editor rules:
 
 - The column is `min(740px, calc(100% - 48px))`, centered. The title may wrap to two or
   three lines; it never exceeds the measure.
-- The excerpt is an inline, borderless field. When empty it shows `Add an excerpt` in
-  `--fg-tertiary` at the same size. It is not a textarea card.
+- The excerpt is an inline, borderless field. It is not a textarea card. A non-empty
+  excerpt always renders; when the excerpt is empty the row is hidden unless the
+  "Always show under title" preference (inspector → Post excerpt) is on, in which case
+  it shows `Add an excerpt` in `--fg-tertiary` at the same size.
 - A `1px` `--border-subtle` divider separates the excerpt from the body. The divider is
   inset to the measure, not full-bleed.
 - Body prose uses `--font-serif` for all Koenig cards that carry prose (paragraph,
@@ -544,7 +546,17 @@ Centered column, top to bottom:
    `Add an excerpt`.
 5. **Divider** — `1px --border-subtle`, full measure, `24px` above and below.
 6. **Koenig Lexical prose** — `20px / 1.6`, `--font-serif`, `letter-spacing: 0.1px`.
-   The editor is borderless; focus is indicated by the caret, not a ring.
+   The editor is borderless; focus is indicated by the caret, not a ring. The editor
+   operates in a clean, distraction-free keyboard-first mode where the floating `+` add-block
+   button is completely hidden (`[data-kg-plus-button] { display: none !important; }`),
+   ensuring all cards and blocks are invoked exclusively via slash (`/`) commands without
+   disrupting the card insertion menu or focus mode styling.
+
+In the canvas the feature image and caption render only when the post has one and
+"Show in editor" is enabled (inspector → Feature image; default on). The excerpt row
+follows the "Always show under title" preference (inspector → Post excerpt). Both are
+global display preferences, not per-post fields, and are stored under
+`geist.ui-prefs.v1`.
 
 Spacing: `32px` from the top floating bar to the feature image; `16px` image → caption;
 `40px` caption → title; `16px` title → excerpt; `24px` excerpt → divider; `24px`
@@ -559,11 +571,15 @@ Floating bottom-right:
 
 Focus mode:
 
-- `Cmd+\` hides the rail, post list, and inspector; the editor fills the window. The
-  floating bars remain, but at 40% opacity.
+- `Cmd+\` is contextual: it toggles the navigation rail in the Library and focus
+  mode in the editor, where `Esc` is the only exit.
+- Focus mode hides the titlebar identity, the titlebar action pill, the back
+  button, the editor's right-hand action cluster, the inspector, and the update
+  banner. It also removes the chrome borders; the traffic lights, the drag strip,
+  the save-status bar, and the word count remain.
+- The floating bars remain, but at 40% opacity.
 - While typing, the bars fade to 0% after 1.5s of inactivity in the pointer; any
-  pointer move, keypress, or scroll restores them. The text column never moves.
-- `Esc` exits focus mode and restores the previous layout.
+  pointer move, keypress, or scroll restores them. The text column never moves (noting that entering focus mode from an open inspector will re-center the column once as the 320px panel collapses, but thereafter the text column invariant holds during the idle-fade cycle).
 - Under `prefers-reduced-motion`, fades are instant and the auto-fade behavior is
   disabled (bars stay at their normal opacity).
 
@@ -843,7 +859,7 @@ Rules:
 
 | Action | Shortcut / behavior |
 | --- | --- |
-| Toggle focus mode | `Cmd+\` |
+| Toggle focus mode | `Cmd+\` in the editor; toggles the navigation rail in the Library |
 | Toggle navigation rail | Sidebar toggle button (focusable, `aria-expanded`) |
 | Save revision | `Cmd+S` (existing) |
 | Close drawer / sheet | `Esc`, restores focus to the trigger |

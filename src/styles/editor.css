@@ -298,6 +298,25 @@
  * Title, excerpt, divider (§3.3, §4.5)
  * ------------------------------------------------------------------------- */
 
+/* Feature image renders as document content at the top of the canvas: it is
+ * visible in focus mode too, so no data-focus rule here. */
+.editor-feature-image {
+	margin: 0 0 var(--space-10); /* 40px to the title */
+}
+
+.editor-feature-image img {
+	display: block;
+	width: 100%;
+	height: auto;
+	border-radius: var(--radius-md);
+}
+
+.editor-feature-image figcaption {
+	margin-top: var(--space-4);
+	font-size: 13px;
+	color: var(--fg-muted);
+}
+
 .editor-canvas .title-input {
 	display: block;
 	width: 100%;
@@ -411,5 +430,78 @@
 
 	.editor-shell .preview-group select {
 		max-width: 104px;
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * Focus mode (§4.5)
+ *
+ * `Cmd+\` in the editor hides every distracting control. The header stays
+ * mounted — App.tsx mirrors save state through a MutationObserver on it — so
+ * only its contents and background are removed, never the element itself.
+ * The inspector column collapses through CSS; Editor's own `drawer` state is
+ * untouched, so exiting focus mode restores whatever was open.
+ * ------------------------------------------------------------------------- */
+
+.app-shell[data-focus="on"] .editor-shell.editor-shell,
+.app-shell[data-focus="on"] .editor-shell.editor-shell.with-sidebar {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell[data-focus="on"] .inspector.inspector {
+	display: none;
+}
+
+.app-shell[data-focus="on"] .editor-header {
+	background: none;
+}
+
+.app-shell[data-focus="on"] .editor-actions {
+	display: none;
+}
+
+/* `Esc` is the only exit, so the back button never appears while focused. */
+.app-shell[data-focus="on"] .editor-header [data-testid="back-button"] {
+	display: none;
+}
+
+/* Drop the `.with-sidebar` offset and the glass pill: the word count floats
+ * over the bare canvas while focused. */
+.app-shell[data-focus="on"] .editor-word-count,
+.app-shell[data-focus="on"]
+	.editor-shell.editor-shell
+	.editor-word-count.editor-word-count.with-sidebar {
+	right: var(--space-5);
+	border-color: transparent;
+	background: transparent;
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
+
+/* The save-status bar and the word count idle at 40%, then fade out. */
+.app-shell[data-focus="on"] .editor-topbar-left,
+.app-shell[data-focus="on"] .editor-word-count {
+	opacity: 0.4;
+	transition: opacity 200ms var(--motion-ease);
+}
+
+.app-shell[data-focus="on"][data-focus-idle="on"] .editor-topbar-left,
+.app-shell[data-focus="on"][data-focus-idle="on"] .editor-word-count {
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* Reduced motion disables the auto-fade: the bars stay fully visible. */
+@media (prefers-reduced-motion: reduce) {
+	.app-shell[data-focus="on"] .editor-topbar-left,
+	.app-shell[data-focus="on"] .editor-word-count {
+		opacity: 1;
+		transition: none;
+	}
+
+	.app-shell[data-focus="on"][data-focus-idle="on"] .editor-topbar-left,
+	.app-shell[data-focus="on"][data-focus-idle="on"] .editor-word-count {
+		opacity: 1;
+		pointer-events: auto;
 	}
 }

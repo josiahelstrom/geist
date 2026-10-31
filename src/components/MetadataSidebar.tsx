@@ -19,6 +19,7 @@ import {
 	serializeTiersForSave,
 } from "../lib/posts";
 import {urlFromUploadResponse} from "../lib/uploader";
+import {setUiPrefs, useUiPrefs} from "../lib/uiPrefs";
 
 export type PostMetadataState = {
 	slug: string;
@@ -134,6 +135,7 @@ export default function MetadataSidebar({
 	const [rotating, setRotating] = useState(false);
 	const [rotateError, setRotateError] = useState<string | null>(null);
 	const [rotateNote, setRotateNote] = useState<string | null>(null);
+	const uiPrefs = useUiPrefs();
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 
 	// Keep a rotation confirmation from lingering forever.
@@ -587,6 +589,21 @@ export default function MetadataSidebar({
 				</Disclosure>
 
 				<Disclosure title="Feature image">
+					<label className="inspector-checkbox">
+						<input
+							type="checkbox"
+							checked={uiPrefs.showFeatureImage}
+							onChange={e =>
+								setUiPrefs({showFeatureImage: e.target.checked})
+							}
+							data-testid="show-feature-image-checkbox"
+						/>
+						<span>Show in editor</span>
+					</label>
+					<p className="inspector-hint">
+						Controls whether the image appears at the top of the writing
+						view.
+					</p>
 					<input
 						ref={fileInputRef}
 						type="file"
@@ -709,6 +726,21 @@ export default function MetadataSidebar({
 							{meta.customExcerpt.length}/{MAX_EXCERPT_LENGTH}
 						</span>
 					</div>
+					<label className="inspector-checkbox">
+						<input
+							type="checkbox"
+							checked={uiPrefs.alwaysShowExcerpt}
+							onChange={e =>
+								setUiPrefs({alwaysShowExcerpt: e.target.checked})
+							}
+							data-testid="always-show-excerpt-checkbox"
+						/>
+						<span>Always show under title</span>
+					</label>
+					<p className="inspector-hint">
+						Empty excerpts are hidden in the writing view unless this is
+						on.
+					</p>
 					<textarea
 						id="post-excerpt-input"
 						className="inspector-textarea"

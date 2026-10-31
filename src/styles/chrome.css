@@ -431,3 +431,18 @@
 		transform: translateX(300%);
 	}
 }
+
+/* ---------------------------------------------------------------------------
+ * Focus mode (§4.5)
+ *
+ * Only the editor route sets `data-focus="on"`. The titlebar itself and the
+ * traffic-light gutter stay untouched so the window drag strip and the native
+ * traffic lights survive; only the identity copy, the action pill, and the
+ * update banner are removed.
+ * ------------------------------------------------------------------------- */
+
+.app-shell[data-focus="on"] .titlebar-identity,
+.app-shell[data-focus="on"] .titlebar-actions,
+.app-shell[data-focus="on"] .update-banner {
+	display: none;
+}

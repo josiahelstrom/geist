@@ -59,7 +59,7 @@ has been found, but no private key."
 The `.app`, updater archive and `.dmg` land in:
 - `src-tauri/target/release/bundle/macos/Geist.app`
 - `src-tauri/target/release/bundle/macos/Geist.app.tar.gz` (plus `.sig`)
-- `src-tauri/target/release/bundle/dmg/Geist_1.0.0-rc.2_aarch64.dmg`
+- `src-tauri/target/release/bundle/dmg/Geist_1.0.0_aarch64.dmg`
 
 Release builds always carry the updater signature. macOS code signing depends on
 the environment: `bundle.macOS.signingIdentity` is `"-"`, so a plain local build
@@ -71,7 +71,7 @@ the required GitHub secrets and the tag flow are documented in
 
 ## First launch
 
-`v1.0.0-rc.2` is ad-hoc signed and not notarized, so macOS Gatekeeper warns on
+`v1.0.0` is ad-hoc signed and not notarized yet, so macOS Gatekeeper warns on
 first launch ("Apple could not verify ..."). To open the app, right-click
 (Control-click) it and choose **Open**, then confirm. The same can be done from
 Terminal after dragging it to `/Applications`:
@@ -80,8 +80,7 @@ Terminal after dragging it to `/Applications`:
 xattr -dr com.apple.quarantine /Applications/Geist.app
 ```
 
-Notarization is pending. GA will be signed with an Apple Developer ID certificate
-and notarized once the certificate is provisioned.
+Developer ID signing and notarization will be applied once the certificate is provisioned.
 
 ## How it works
 
@@ -120,18 +119,17 @@ Deliberate safety rules, each covered by a test:
   contains an unknown Lexical node, an error boundary catches it and offers
   "Open in Ghost Admin ↗" instead of blanking the editor.
 
-v1.0.0-rc.2 "Release Candidate" makes Geist installable and self-updating. macOS
-builds ship as a DMG plus a signed updater archive; the RC is ad-hoc signed and
-not notarized, so first launch goes through the Gatekeeper prompt described in
-[First launch](#first-launch). Developer ID signing and notarization land at GA.
+v1.0.0 "General Availability" delivers the 1.0 release of Geist with native
+desktop packaging and auto-updating. macOS builds ship as a DMG plus a signed
+updater archive; builds are ad-hoc signed and not notarized yet, so first launch
+goes through the Gatekeeper prompt described in [First launch](#first-launch).
 Installed apps poll the GitHub Releases `latest.json` manifest and update
 themselves in place through `tauri-plugin-updater` and `tauri-plugin-process`;
-updates are verified against the public key embedded in the bundle. Windows builds use WebView2. Releases are built
-by `.github/workflows/release.yml` from a `v*` tag; keys, secrets and the tag flow are
-in [`docs/releasing.md`](./docs/releasing.md). The RC is published as a normal
-(non-prerelease) GitHub Release so `releases/latest/download/latest.json` resolves and
-installed builds can update; `v1.0.0-rc.2` is an RC by version number and by the
-`releaseDraft` gate, not by GitHub's prerelease flag.
+updates are verified against the public key embedded in the bundle. Windows builds
+use WebView2. Releases are built by `.github/workflows/release.yml` from a `v*`
+tag; keys, secrets and the tag flow are in [`docs/releasing.md`](./docs/releasing.md).
+Releases are published as normal (non-prerelease) GitHub Releases so
+`releases/latest/download/latest.json` resolves and installed builds can update.
 
 v0.8.1 "Maintenance" hardens edge cases identified during wide-level code review.
 Conflict resolution preserves edits typed while the 409 collision banner is displayed;
@@ -149,8 +147,8 @@ because Ghost cannot be reached, the single-flight saver keeps your edits, repor
 `status: "offline"`, and writes the still-unsaved patch to the cache instead of
 discarding it. On reconnect the app replays any dirty patches automatically; a `409`
 still halts the saver rather than clobbering the server copy. This milestone completes
-the feature set; `v1.0.0-rc.2` followed with packaging, the auto-updater and ad-hoc
-Apple code signing, with Developer ID signing and notarization pending for GA.
+the feature set; `v1.0.0` followed with packaging, the auto-updater and ad-hoc
+Apple code signing.
 
 v0.7.0 "Scraps" adds a local-first private scratchpad. A scrap is a note that lives
 only on this Mac: it is written to `scraps.json` through `tauri-plugin-store`, keyed per
@@ -183,9 +181,13 @@ v0.5.0 "Native" rebuilds the shell around macOS: a vibrancy-backed window with a
 overlay title bar (hidden title, inset traffic lights), a native menu bar
 (Geist/File/Edit/View/Window) whose commands are routed into the UI, and a three-pane
 layout of navigation rail, post list and inspector — each pane collapsible from the title
-bar or with `Cmd+\`, `Cmd+Alt+I`, `Cmd+N` and `Cmd+S`. The editor canvas is borderless and
+bar or with `Cmd+\`, `Cmd+Alt+I`, `Cmd+N` and `Cmd+S`. `Cmd+\` is contextual: it collapses
+the rail in the Library and toggles focus mode in the editor, where `Esc` is the only way
+out. The editor canvas is borderless and
 the Koenig typography, chrome and inspector are themed entirely by CSS tokens, with
-system/light/dark appearance cycling from the title bar or `Cmd+Shift+L`.
+system/light/dark appearance cycling from the title bar or `Cmd+Shift+L`. The inspector's
+Post excerpt and Feature image sections also carry global display switches for the inline
+excerpt row and the canvas feature image.
 
 v0.4.0 completed the publishing flow: web-only publishing by default, scheduled
 publishing and unscheduling, post access with paid tiers, newsletter sending behind an

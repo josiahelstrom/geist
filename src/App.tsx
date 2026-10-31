@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import {listen} from "@tauri-apps/api/event";
 import {type Post, type PostStatusFilter, type Site} from "./lib/api";
 import {createDraft} from "./lib/posts";
@@ -93,6 +93,8 @@ export default function App() {
 	const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [inspectorOpen, setInspectorOpen] = useState(false);
+	const [focusMode, setFocusMode] = useState(false);
+	const [focusIdle, setFocusIdle] = useState(false);
 	const [postFilter, setPostFilter] = useState<PostStatusFilter>("draft");
 	const [postQuery, setPostQuery] = useState("");
 	const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -188,6 +190,7 @@ export default function App() {
 		setActiveScrapId(null);
 		setView("posts");
 		setSaveStatus(null);
+		setFocusMode(false);
 		setRoute({name: "list"});
 	}, []);
 
@@ -196,6 +199,7 @@ export default function App() {
 		setActivePost(null);
 		setActiveScrapId(null);
 		setSaveStatus(null);
+		setFocusMode(false);
 		setRoute({name: "connect"});
 	}, []);
 
@@ -206,6 +210,7 @@ export default function App() {
 		setActiveScrapId(null);
 		setView("posts");
 		setSaveStatus(null);
+		setFocusMode(false);
 		setRoute({name: "list"});
 	}, []);
 
@@ -215,6 +220,7 @@ export default function App() {
 		setView("posts");
 		setSaveStatus("saved");
 		setInspectorOpen(false);
+		setFocusMode(false);
 		setRoute({name: "editor", postId: post.id});
 	}, []);
 
@@ -224,6 +230,7 @@ export default function App() {
 		setView("scraps");
 		setSaveStatus("saved");
 		setInspectorOpen(false);
+		setFocusMode(false);
 		setRoute({name: "scrap-editor"});
 	}, []);
 
@@ -243,6 +250,7 @@ export default function App() {
 		setActiveScrapId(null);
 		setSaveStatus(null);
 		setInspectorOpen(false);
+		setFocusMode(false);
 		setRoute({name: "list"});
 	}, []);
 
@@ -300,22 +308,129 @@ export default function App() {
 		setSidebarOpen(open => !open);
 	}, []);
 
-	// `Cmd+\` collapses the rail from anywhere in the window. The native menu
-	// sends the same intent through `menu-toggle-sidebar`.
+	const routeNameRef = useRef(route.name);
+	routeNameRef.current = route.name;
+
+	// On macOS the native menu accelerator and the webview keydown can both fire
+	// for one keypress; ignore the duplicate so a toggle cannot cancel itself.
+	const lastToggleRef = useRef(0);
+
+	// `Cmd+\` is contextual: it collapses the rail in the Library and toggles
+	// focus mode in the editor. The native menu sends the same intent through
+	// `menu-toggle-sidebar`.
+	const toggleFocus = useCallback(() => {
+		if (document.querySelector(".sheet-backdrop")) {
+			return;
+		}
+		const now = Date.now();
+		if (now - lastToggleRef.current < 120) {
+			return;
+		}
+		lastToggleRef.current = now;
+		const currentRoute = routeNameRef.current;
+		if (currentRoute === "editor" || currentRoute === "scrap-editor") {
+			setFocusMode(on => !on);
+		} else {
+			setSidebarOpen(open => !open);
+		}
+	}, []);
+
 	useEffect(() => {
 		function onKeyDown(event: KeyboardEvent) {
+			if (event.repeat) {
+				return;
+			}
 			if (
 				(event.metaKey || event.ctrlKey) &&
 				!event.altKey &&
 				(event.key === "\\" || event.code === "Backslash")
 			) {
 				event.preventDefault();
-				setSidebarOpen(open => !open);
+				toggleFocus();
 			}
 		}
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, []);
+	}, [toggleFocus]);
+
+	// Focus mode fades its remaining chrome after 1.5s without activity. Any
+	// pointer move, keypress or scroll wakes it and restarts the timer.
+	useEffect(() => {
+		if (!focusMode) {
+			return;
+		}
+
+		const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+		let reducedMotion = mediaQuery.matches;
+		let timer: number | undefined;
+
+		function schedule() {
+			if (timer !== undefined) {
+				window.clearTimeout(timer);
+				timer = undefined;
+			}
+			// Reduced motion keeps the bars fully visible: never auto-fade.
+			if (reducedMotion) {
+				setFocusIdle(false);
+				return;
+			}
+			timer = window.setTimeout(() => setFocusIdle(true), 1500);
+		}
+
+		function onMediaChange(e: MediaQueryListEvent) {
+			reducedMotion = e.matches;
+			if (reducedMotion) {
+				setFocusIdle(false);
+			}
+			schedule();
+		}
+
+		mediaQuery.addEventListener("change", onMediaChange);
+
+		function onActivity() {
+			setFocusIdle(idle => (idle ? false : idle));
+			schedule();
+		}
+
+		setFocusIdle(false);
+		schedule();
+		window.addEventListener("pointermove", onActivity, true);
+		window.addEventListener("keydown", onActivity, true);
+		window.addEventListener("scroll", onActivity, true);
+
+		return () => {
+			if (timer !== undefined) {
+				window.clearTimeout(timer);
+			}
+			mediaQuery.removeEventListener("change", onMediaChange);
+			window.removeEventListener("pointermove", onActivity, true);
+			window.removeEventListener("keydown", onActivity, true);
+			window.removeEventListener("scroll", onActivity, true);
+			setFocusIdle(false);
+		};
+	}, [focusMode]);
+
+	// `Esc` is the only exit from focus mode. Leave the publish sheet's own Esc
+	// handling and focus trap alone while it is open.
+	useEffect(() => {
+		if (!focusMode) {
+			return;
+		}
+
+		function onEscape(event: KeyboardEvent) {
+			if (event.key !== "Escape") {
+				return;
+			}
+			if (document.querySelector(".sheet-backdrop")) {
+				return;
+			}
+			event.preventDefault();
+			setFocusMode(false);
+		}
+
+		window.addEventListener("keydown", onEscape);
+		return () => window.removeEventListener("keydown", onEscape);
+	}, [focusMode]);
 
 	const toggleInspector = useCallback(() => {
 		const control = document.querySelector<HTMLButtonElement>(
@@ -362,7 +477,7 @@ export default function App() {
 					void handleNewPost();
 					break;
 				case "menu-toggle-sidebar":
-					toggleSidebar();
+					toggleFocus();
 					break;
 				case "menu-toggle-inspector":
 					toggleInspector();
@@ -394,7 +509,7 @@ export default function App() {
 			cancelled = true;
 			unlisten?.();
 		};
-	}, [handleNewPost, toggleSidebar, toggleInspector, cycleTheme]);
+	}, [handleNewPost, toggleFocus, toggleInspector, cycleTheme]);
 
 	// Keep the titlebar's title, status and save indicator in step with the
 	// editor. The editor remains the owner of all three. Scraps use the same
@@ -452,19 +567,7 @@ export default function App() {
 			});
 		}
 
-		function onTitleInput(event: Event) {
-			const target = event.target;
-			if (
-				target instanceof HTMLInputElement &&
-				target.dataset.testid === "title-input"
-			) {
-				const value = target.value;
-				setActivePost(prev => (prev ? {...prev, title: value} : prev));
-			}
-		}
-
 		attach();
-		window.addEventListener("input", onTitleInput, true);
 
 		return () => {
 			cancelled = true;
@@ -472,7 +575,6 @@ export default function App() {
 				window.clearTimeout(retry);
 			}
 			observer?.disconnect();
-			window.removeEventListener("input", onTitleInput, true);
 		};
 	}, [route]);
 
@@ -581,6 +683,8 @@ export default function App() {
 		<div
 			className="app-shell"
 			data-sidebar={sidebarOpen ? "open" : "collapsed"}
+			data-focus={focusMode ? "on" : undefined}
+			data-focus-idle={focusMode ? (focusIdle ? "on" : "off") : undefined}
 		>
 			{titleBar}
 			{updateBanner}
@@ -601,6 +705,9 @@ export default function App() {
 						onBack={handleBackToList}
 						onReconnect={handleDisconnect}
 						onOpenScrap={handleOpenScrap}
+						onTitleChange={title =>
+							setActivePost(prev => (prev ? {...prev, title} : prev))
+						}
 					/>
 				) : null}
 			</div>

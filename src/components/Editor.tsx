@@ -56,15 +56,17 @@ import {
 	getScrap,
 	promoteScrapToDraft,
 	updateScrap,
+	calculateWordCount,
 	type Scrap,
 } from "../lib/scraps";
+import {shouldShowExcerpt, useUiPrefs} from "../lib/uiPrefs";
 import {versionBanner, shouldEnforceReadOnly} from "../lib/version";
 import EditorErrorBoundary from "./EditorErrorBoundary";
 import MetadataSidebar, {type PostMetadataState} from "./MetadataSidebar";
 import PublishModal, {type PublishAction} from "./PublishModal";
 import RevisionsDrawer from "./RevisionsDrawer";
 
-type Props = {
+export type EditorProps = {
 	site: Site;
 	/** Ghost post being edited, when this is a server-backed editor. */
 	postId?: string;
@@ -76,6 +78,7 @@ type Props = {
 	onOpenPost?: (post: PostDetail) => void;
 	/** Demote (draft → scrap) hands the new local scrap to the app. */
 	onOpenScrap?: (scrap: Scrap) => void;
+	onTitleChange?: (title: string) => void;
 };
 
 const STATUS_COPY: Record<SaveStatus, string> = {
@@ -88,40 +91,7 @@ const STATUS_COPY: Record<SaveStatus, string> = {
 	offline: "Offline (Saved locally)",
 };
 
-/** Walk a Lexical editor-state JSON tree and collect its text runs. */
-function textFromLexicalNode(node: unknown): string {
-	if (!node || typeof node !== "object") {
-		return "";
-	}
-	const value = node as {
-		text?: unknown;
-		type?: unknown;
-		children?: unknown[];
-	};
-	let text = typeof value.text === "string" ? value.text : "";
-	if (value.type === "linebreak") {
-		text += " ";
-	}
-	if (Array.isArray(value.children)) {
-		text += ` ${value.children.map(textFromLexicalNode).join(" ")}`;
-	}
-	return text;
-}
 
-/** Count words in the serialised Lexical state, independent of the saver. */
-function countWords(lexical: string): number {
-	if (!lexical.trim()) {
-		return 0;
-	}
-	try {
-		const parsed = JSON.parse(lexical) as unknown;
-		const text = textFromLexicalNode(parsed).trim();
-		return text ? (text.match(/\S+/g)?.length ?? 0) : 0;
-	} catch {
-		// A half-written state must never break the editor chrome.
-		return 0;
-	}
-}
 
 const iconProps = {
 	width: 16,
@@ -197,13 +167,22 @@ export default function Editor({
 	onReconnect,
 	onOpenPost,
 	onOpenScrap,
-}: Props) {
+	onTitleChange,
+}: EditorProps) {
 	const isScrapMode = Boolean(scrapId);
+	const uiPrefs = useUiPrefs();
 	const [post, setPost] = useState<PostDetail | null>(null);
 	const [scrap, setScrap] = useState<Scrap | null>(null);
 	const [editorVersion, setEditorVersion] = useState(0);
 	const [title, setTitle] = useState("");
 	const [meta, setMeta] = useState<PostMetadataState>(EMPTY_META);
+	const [featureImageBroken, setFeatureImageBroken] = useState(false);
+	// A non-empty excerpt always renders; the preference only keeps the empty
+	// row around so it can be typed into inline.
+	const showExcerpt = shouldShowExcerpt(
+		meta.customExcerpt,
+		uiPrefs.alwaysShowExcerpt,
+	);
 	const [siteTags, setSiteTags] = useState<TagSummary[]>([]);
 	const [siteAuthors, setSiteAuthors] = useState<AuthorSummary[]>([]);
 	const [siteTiers, setSiteTiers] = useState<TierSummary[]>([]);
@@ -302,7 +281,7 @@ export default function Editor({
 	// short debounce and never participates in saving.
 	useEffect(() => {
 		const timer = window.setTimeout(() => {
-			setWordCount(countWords(lexical));
+			setWordCount(calculateWordCount(lexical));
 		}, 250);
 		return () => window.clearTimeout(timer);
 	}, [lexical]);
@@ -315,7 +294,13 @@ export default function Editor({
 		}
 		el.style.height = "auto";
 		el.style.height = `${el.scrollHeight}px`;
-	}, [meta.customExcerpt]);
+	}, [meta.customExcerpt, showExcerpt]);
+
+	// A broken feature image URL for one post must not suppress the image for
+	// the next post that reuses the same canvas.
+	useEffect(() => {
+		setFeatureImageBroken(false);
+	}, [meta.featureImage]);
 
 	const bindPost = useCallback(
 		(p: PostDetail) => {
@@ -324,6 +309,7 @@ export default function Editor({
 			setScrap(null);
 			scrapRef.current = null;
 			setTitle(p.title ?? "");
+			onTitleChange?.(p.title ?? "");
 			setLexical(p.lexical ?? "");
 			setMeta(metaFromPost(p));
 			setConflict(false);
@@ -776,13 +762,14 @@ export default function Editor({
 				return;
 			}
 			setTitle(value);
+			onTitleChange?.(value);
 			if (isScrapMode) {
 				queueScrapSave({title: value});
 			} else {
 				saverRef.current?.queueDebounced({title: value});
 			}
 		},
-		[isScrapMode, queueScrapSave],
+		[isScrapMode, onTitleChange, queueScrapSave],
 	);
 
 	const handleMetaChange = useCallback(
@@ -1655,6 +1642,22 @@ export default function Editor({
 						</div>
 					)}
 
+					{!isScrapMode &&
+						uiPrefs.showFeatureImage &&
+						meta.featureImage &&
+						!featureImageBroken && (
+						<figure className="editor-feature-image">
+							<img
+								src={meta.featureImage}
+								alt={meta.featureImageAlt ?? ""}
+								onError={() => setFeatureImageBroken(true)}
+							/>
+							{meta.featureImageCaption && (
+								<figcaption>{meta.featureImageCaption}</figcaption>
+							)}
+						</figure>
+					)}
+
 					<input
 						className="title-input"
 						value={title}
@@ -1664,23 +1667,25 @@ export default function Editor({
 						data-testid="title-input"
 					/>
 
-					<textarea
-						ref={excerptRef}
-						className="editor-excerpt"
-						value={meta.customExcerpt}
-						onChange={e =>
-							handleMetaChange(
-								{...meta, customExcerpt: e.target.value},
-								{custom_excerpt: e.target.value || null},
-							)
-						}
-						readOnly={isReadOnly}
-						rows={1}
-						maxLength={MAX_EXCERPT_LENGTH}
-						placeholder="Add an excerpt"
-						spellCheck
-						data-testid="excerpt-input-inline"
-					/>
+					{showExcerpt && (
+						<textarea
+							ref={excerptRef}
+							className="editor-excerpt"
+							value={meta.customExcerpt}
+							onChange={e =>
+								handleMetaChange(
+									{...meta, customExcerpt: e.target.value},
+									{custom_excerpt: e.target.value || null},
+								)
+							}
+							readOnly={isReadOnly}
+							rows={1}
+							maxLength={MAX_EXCERPT_LENGTH}
+							placeholder="Add an excerpt"
+							spellCheck
+							data-testid="excerpt-input-inline"
+						/>
+					)}
 
 					<div className="editor-divider" role="separator" />
 

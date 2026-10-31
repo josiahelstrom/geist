@@ -161,8 +161,7 @@ as the `TAURI_SIGNING_PRIVATE_KEY` secret and in the maintainer's password manag
 | `v0.7.0 Scraps` | **Shipped** | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
 | `v0.8.0 Feature Complete` | **Shipped** | Offline draft cache (`draft_cache.json`), `offline` save status, offline editing from cached copies, automatic replay of dirty patches on reconnect |
 | `v0.8.1 Maintenance` | **Shipped** | Code review hardening: conflict overwrite preservation, scrap mode close guard, titlebar status mirror, promote idempotency, forget site cache purge |
-| `v1.0.0-rc.2 Release Candidate` | **Shipped / Current** | Ad-hoc macOS signing (not notarized), `tauri-plugin-updater` with GitHub Releases, DMG & updater artifacts, Windows/WebView2 build |
-| `v1.0.0 General Availability` | **Next Up** | First official public release, Homebrew cask |
+| `v1.0.0 General Availability` | **Shipped / Current** | First official public release with DMG & signed updater artifacts, Windows/WebView2 build, `tauri-plugin-updater` with GitHub Releases |
 
 ### Milestone detail
 
@@ -208,15 +207,11 @@ flushes on window close requests; titlebar save status mirrors local scraps; pro
 reuses existing drafts across retries to prevent duplicate Ghost posts; forgetting a site
 purges its cached drafts and scraps from disk; and opener actions catch unhandled rejections.
 
-**v1.0.0-rc.2 (current).** Distribution. macOS bundles are ad-hoc signed
-(`bundle.macOS.signingIdentity: "-"`) but not notarized, so first launch shows the
+**v1.0.0 GA (current).** First official public release. macOS bundles are ad-hoc signed
+(`bundle.macOS.signingIdentity: "-"`) but not notarized yet, so first launch shows the
 Gatekeeper "unverified developer" prompt (right-click → Open, or the
-`xattr -dr com.apple.quarantine` workaround); Developer ID signing and notarization
-are the GA work item. Bundles ship as a DMG plus a signed updater archive; Windows
-builds use WebView2. `tauri-plugin-updater` reads `latest.json` from
+`xattr -dr com.apple.quarantine` workaround). Bundles ship as a DMG plus a signed updater
+archive; Windows builds use WebView2. `tauri-plugin-updater` reads `latest.json` from
 GitHub Releases and `tauri-plugin-process` restarts the app after an in-place install.
 Releases are built by `.github/workflows/release.yml` on a `v*` tag and stay drafts
 until verified. See [`releasing.md`](./releasing.md).
-
-**v1.0.0 GA (next up).** First official public release: the same regular-release path
-as the RC, plus the Homebrew cask.
