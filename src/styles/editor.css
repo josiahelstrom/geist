@@ -158,8 +158,7 @@
 .editor-shell .editor-action,
 .editor-shell .editor-icon-button,
 .editor-shell .preview-group select,
-.editor-shell .preview-group button,
-.editor-shell .editor-theme-toggle button {
+.editor-shell .preview-group button {
 	-webkit-app-region: no-drag;
 }
 
@@ -268,30 +267,6 @@
 .editor-shell .preview-group select:hover {
 	background: var(--bg-row-hover);
 	color: var(--fg-primary);
-}
-
-/* Keep the existing ThemeToggle component, but let it sit in the flat bar. */
-.editor-shell .editor-theme-toggle button {
-	height: var(--control-height);
-	padding: 0 var(--space-2);
-	border: 1px solid transparent;
-	border-radius: var(--radius-md);
-	background: transparent;
-	color: var(--fg-secondary);
-	font-family: var(--font-sans);
-	font-size: 12px;
-	line-height: 1;
-	white-space: nowrap;
-	cursor: pointer;
-}
-
-.editor-shell .editor-theme-toggle button:hover:not(:disabled) {
-	background: var(--bg-row-hover);
-	color: var(--fg-primary);
-}
-
-.editor-shell .editor-theme-toggle button:active {
-	transform: none;
 }
 
 /* ---------------------------------------------------------------------------
