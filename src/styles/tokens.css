@@ -45,10 +45,9 @@
 	--glass-blur: blur(16px) saturate(180%);
 
 	/* Typography (§3.1) */
-	--font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
-		"Inter", system-ui, sans-serif;
-	--font-serif: Georgia, "Times New Roman", serif;
-	--font-mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--font-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+	--font-serif: "Lora Variable", "Lora", Georgia, "Times New Roman", serif;
+	--font-mono: "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 
 	/* Geometry (§4.8) */
 	--radius-sm: 4px;
@@ -64,7 +63,7 @@
 	--rail-width: 260px;
 	--rail-inset: 8px;
 	--list-min-width: 300px;
-	--editor-measure: 740px;
+	--editor-measure: 780px;
 	--inspector-width: 320px;
 
 	--row-height: 32px;

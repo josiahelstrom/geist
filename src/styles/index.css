@@ -6,6 +6,13 @@
  * main.tsx, so rules that need to win use doubled selectors (see editor.css,
  * inspector.css, modal.css and connect.css).
  */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/inter/wght-italic.css";
+@import "@fontsource-variable/lora";
+@import "@fontsource-variable/lora/wght-italic.css";
+@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/jetbrains-mono/wght-italic.css";
+
 @import "./tokens.css";
 @import "./base.css";
 @import "./chrome.css";

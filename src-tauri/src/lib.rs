@@ -616,8 +616,13 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<tau
 
     let view = SubmenuBuilder::new(app, "View")
         .item(
-            &MenuItemBuilder::with_id("menu-toggle-sidebar", "Focus Mode")
+            &MenuItemBuilder::with_id("menu-toggle-sidebar", "Toggle Sidebar")
                 .accelerator("CmdOrCtrl+\\")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("menu-toggle-focus", "Focus Mode")
+                .accelerator("CmdOrCtrl+Shift+F")
                 .build(app)?,
         )
         .item(

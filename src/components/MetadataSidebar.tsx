@@ -759,6 +759,70 @@ export default function MetadataSidebar({
 					/>
 				</Disclosure>
 
+				<Disclosure title="Typography">
+					<label className="inspector-label" id="editor-font-label">
+						Editor font
+					</label>
+					<div
+						className="inspector-segmented"
+						role="radiogroup"
+						aria-labelledby="editor-font-label"
+						data-testid="editor-font-control"
+					>
+						<label className="inspector-segment">
+							<input
+								type="radio"
+								name="editor-font"
+								value="serif"
+								checked={uiPrefs.editorFont === "serif"}
+								onChange={() => setUiPrefs({editorFont: "serif"})}
+								data-testid="font-option-serif"
+							/>
+							<span>Serif</span>
+						</label>
+						<label className="inspector-segment">
+							<input
+								type="radio"
+								name="editor-font"
+								value="sans"
+								checked={uiPrefs.editorFont === "sans"}
+								onChange={() => setUiPrefs({editorFont: "sans"})}
+								data-testid="font-option-sans"
+							/>
+							<span>Sans</span>
+						</label>
+						<label className="inspector-segment">
+							<input
+								type="radio"
+								name="editor-font"
+								value="mono"
+								checked={uiPrefs.editorFont === "mono"}
+								onChange={() => setUiPrefs({editorFont: "mono"})}
+								data-testid="font-option-mono"
+							/>
+							<span>Mono</span>
+						</label>
+					</div>
+					<p className="inspector-hint">
+						Controls the body font in the editor canvas.
+					</p>
+
+					<label className="inspector-checkbox">
+						<input
+							type="checkbox"
+							checked={uiPrefs.typewriterMode}
+							onChange={e =>
+								setUiPrefs({typewriterMode: e.target.checked})
+							}
+							data-testid="typewriter-mode-checkbox"
+						/>
+						<span>Typewriter scrolling</span>
+					</label>
+					<p className="inspector-hint">
+						Keep active line vertically centered
+					</p>
+				</Disclosure>
+
 				<Disclosure title="Account & security" defaultOpen={false}>
 					<div className="inspector-account">
 						<span className="inspector-account-site" title={site.siteUrl}>

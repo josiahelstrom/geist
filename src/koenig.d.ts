@@ -72,6 +72,7 @@ declare module "@tryghost/koenig-lexical" {
 		/** Receives the editor state as plain JSON, not a Lexical EditorState. */
 		onChange?: (state: LexicalEditorState) => void;
 		placeholderText?: string;
+		placeholder?: ReactNode;
 		readOnly?: boolean;
 		children?: ReactNode;
 	};

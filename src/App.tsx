@@ -304,20 +304,24 @@ export default function App() {
 		applyTheme(next);
 	}, []);
 
+	// On macOS the native menu accelerator and the webview keydown can both fire
+	// for one keypress; ignore the duplicate so a toggle cannot cancel itself.
+	const lastToggleRef = useRef(0);
+
 	const toggleSidebar = useCallback(() => {
+		const now = Date.now();
+		if (now - lastToggleRef.current < 120) {
+			return;
+		}
+		lastToggleRef.current = now;
 		setSidebarOpen(open => !open);
 	}, []);
 
 	const routeNameRef = useRef(route.name);
 	routeNameRef.current = route.name;
 
-	// On macOS the native menu accelerator and the webview keydown can both fire
-	// for one keypress; ignore the duplicate so a toggle cannot cancel itself.
-	const lastToggleRef = useRef(0);
-
-	// `Cmd+\` is contextual: it collapses the rail in the Library and toggles
-	// focus mode in the editor. The native menu sends the same intent through
-	// `menu-toggle-sidebar`.
+	// Cmd+Shift+F toggles focus mode in the editor.
+	// The native menu sends the same intent through `menu-toggle-focus`.
 	const toggleFocus = useCallback(() => {
 		if (document.querySelector(".sheet-backdrop")) {
 			return;
@@ -330,8 +334,6 @@ export default function App() {
 		const currentRoute = routeNameRef.current;
 		if (currentRoute === "editor" || currentRoute === "scrap-editor") {
 			setFocusMode(on => !on);
-		} else {
-			setSidebarOpen(open => !open);
 		}
 	}, []);
 
@@ -342,16 +344,25 @@ export default function App() {
 			}
 			if (
 				(event.metaKey || event.ctrlKey) &&
+				event.shiftKey &&
+				(event.key.toLowerCase() === "f" || event.code === "KeyF")
+			) {
+				event.preventDefault();
+				toggleFocus();
+				return;
+			}
+			if (
+				(event.metaKey || event.ctrlKey) &&
 				!event.altKey &&
 				(event.key === "\\" || event.code === "Backslash")
 			) {
 				event.preventDefault();
-				toggleFocus();
+				toggleSidebar();
 			}
 		}
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [toggleFocus]);
+	}, [toggleFocus, toggleSidebar]);
 
 	// Focus mode fades its remaining chrome after 1.5s without activity. Any
 	// pointer move, keypress or scroll wakes it and restarts the timer.
@@ -476,8 +487,11 @@ export default function App() {
 				case "menu-new-post":
 					void handleNewPost();
 					break;
-				case "menu-toggle-sidebar":
+				case "menu-toggle-focus":
 					toggleFocus();
+					break;
+				case "menu-toggle-sidebar":
+					toggleSidebar();
 					break;
 				case "menu-toggle-inspector":
 					toggleInspector();
@@ -509,7 +523,7 @@ export default function App() {
 			cancelled = true;
 			unlisten?.();
 		};
-	}, [handleNewPost, toggleFocus, toggleInspector, cycleTheme]);
+	}, [handleNewPost, toggleFocus, toggleSidebar, toggleInspector, cycleTheme]);
 
 	// Keep the titlebar's title, status and save indicator in step with the
 	// editor. The editor remains the owner of all three. Scraps use the same

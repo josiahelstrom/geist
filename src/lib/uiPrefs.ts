@@ -1,10 +1,16 @@
 import {useSyncExternalStore} from "react";
 
+export type EditorFont = "serif" | "sans" | "mono";
+
 export type UiPrefs = {
 	/** Keep the excerpt row visible under the title even when the post has no excerpt. */
 	alwaysShowExcerpt: boolean;
 	/** Render the post's feature image at the top of the editor canvas. */
 	showFeatureImage: boolean;
+	/** Body typography style in the editor canvas. */
+	editorFont: EditorFont;
+	/** Keep the active line vertically centered while typing. */
+	typewriterMode: boolean;
 };
 
 const UI_PREFS_KEY = "geist.ui-prefs.v1";
@@ -13,6 +19,8 @@ const UI_PREFS_EVENT = "geist:ui-prefs-change";
 export const DEFAULT_UI_PREFS: UiPrefs = {
 	alwaysShowExcerpt: false,
 	showFeatureImage: true,
+	editorFont: "serif",
+	typewriterMode: false,
 };
 
 const listeners = new Set<(prefs: UiPrefs) => void>();
@@ -47,6 +55,13 @@ function readUiPrefs(): UiPrefs {
 	// Fill each field independently so one bad value cannot reset the rest.
 	// Unknown keys are ignored because only the known fields are read.
 	const record = parsed as Record<string, unknown>;
+	const editorFont =
+		record.editorFont === "serif" ||
+		record.editorFont === "sans" ||
+		record.editorFont === "mono"
+			? record.editorFont
+			: DEFAULT_UI_PREFS.editorFont;
+
 	return {
 		alwaysShowExcerpt:
 			typeof record.alwaysShowExcerpt === "boolean"
@@ -56,6 +71,11 @@ function readUiPrefs(): UiPrefs {
 			typeof record.showFeatureImage === "boolean"
 				? record.showFeatureImage
 				: DEFAULT_UI_PREFS.showFeatureImage,
+		editorFont,
+		typewriterMode:
+			typeof record.typewriterMode === "boolean"
+				? record.typewriterMode
+				: DEFAULT_UI_PREFS.typewriterMode,
 	};
 }
 
@@ -93,6 +113,16 @@ export function setUiPrefs(patch: Partial<UiPrefs>): UiPrefs {
 			typeof patch.showFeatureImage === "boolean"
 				? patch.showFeatureImage
 				: current.showFeatureImage,
+		editorFont:
+			patch.editorFont === "serif" ||
+			patch.editorFont === "sans" ||
+			patch.editorFont === "mono"
+				? patch.editorFont
+				: current.editorFont,
+		typewriterMode:
+			typeof patch.typewriterMode === "boolean"
+				? patch.typewriterMode
+				: current.typewriterMode,
 	};
 
 	cache = next;

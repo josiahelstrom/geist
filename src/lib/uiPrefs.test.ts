@@ -74,10 +74,14 @@ describe("ui preferences storage", () => {
 		expect(getUiPrefs()).toEqual({
 			alwaysShowExcerpt: false,
 			showFeatureImage: true,
+			editorFont: "serif",
+			typewriterMode: false,
 		});
 		expect(DEFAULT_UI_PREFS).toEqual({
 			alwaysShowExcerpt: false,
 			showFeatureImage: true,
+			editorFont: "serif",
+			typewriterMode: false,
 		});
 	});
 
@@ -87,6 +91,8 @@ describe("ui preferences storage", () => {
 		expect(getUiPrefs()).toEqual({
 			alwaysShowExcerpt: false,
 			showFeatureImage: true,
+			editorFont: "serif",
+			typewriterMode: false,
 		});
 	});
 
@@ -97,6 +103,8 @@ describe("ui preferences storage", () => {
 		expect(getUiPrefs()).toEqual({
 			alwaysShowExcerpt: false,
 			showFeatureImage: true,
+			editorFont: "serif",
+			typewriterMode: false,
 		});
 	});
 
@@ -105,6 +113,8 @@ describe("ui preferences storage", () => {
 			stored: JSON.stringify({
 				alwaysShowExcerpt: true,
 				showFeatureImage: "yes",
+				editorFont: "comic-sans",
+				typewriterMode: "enabled",
 				unknownKey: "ignored",
 			}),
 		});
@@ -113,16 +123,26 @@ describe("ui preferences storage", () => {
 		expect(getUiPrefs()).toEqual({
 			alwaysShowExcerpt: true,
 			showFeatureImage: true,
+			editorFont: "serif",
+			typewriterMode: false,
 		});
 	});
 
 	it("keeps a valid field while defaulting a missing one", async () => {
-		installWindow({stored: JSON.stringify({showFeatureImage: false})});
+		installWindow({
+			stored: JSON.stringify({
+				showFeatureImage: false,
+				editorFont: "mono",
+				typewriterMode: true,
+			}),
+		});
 		const {getUiPrefs} = await loadModule();
 
 		expect(getUiPrefs()).toEqual({
 			alwaysShowExcerpt: false,
 			showFeatureImage: false,
+			editorFont: "mono",
+			typewriterMode: true,
 		});
 	});
 });
@@ -139,14 +159,22 @@ describe("setUiPrefs", () => {
 		expect(first).toEqual({
 			alwaysShowExcerpt: false,
 			showFeatureImage: false,
+			editorFont: "serif",
+			typewriterMode: false,
 		});
 		expect(getUiPrefs()).toEqual(first);
 
-		const second = setUiPrefs({alwaysShowExcerpt: true});
+		const second = setUiPrefs({
+			alwaysShowExcerpt: true,
+			editorFont: "sans",
+			typewriterMode: true,
+		});
 
 		expect(second).toEqual({
 			alwaysShowExcerpt: true,
 			showFeatureImage: false,
+			editorFont: "sans",
+			typewriterMode: true,
 		});
 		expect(getUiPrefs()).toEqual(second);
 		expect(localStorage.getItem("geist.ui-prefs.v1")).toBe(
@@ -160,6 +188,29 @@ describe("setUiPrefs", () => {
 			type: "geist:ui-prefs-change",
 			detail: second,
 		});
+	});
+
+	it("updates typewriterMode independently", async () => {
+		installWindow();
+		const {getUiPrefs, setUiPrefs} = await loadModule();
+
+		expect(getUiPrefs().typewriterMode).toBe(false);
+		setUiPrefs({typewriterMode: true});
+		expect(getUiPrefs().typewriterMode).toBe(true);
+		setUiPrefs({typewriterMode: false});
+		expect(getUiPrefs().typewriterMode).toBe(false);
+	});
+
+	it("ignores invalid editorFont values in patch", async () => {
+		installWindow();
+		const {getUiPrefs, setUiPrefs} = await loadModule();
+
+		setUiPrefs({editorFont: "mono"});
+		expect(getUiPrefs().editorFont).toBe("mono");
+
+		// @ts-expect-error test invalid value runtime protection
+		setUiPrefs({editorFont: "invalid"});
+		expect(getUiPrefs().editorFont).toBe("mono");
 	});
 
 	it("stops notifying after unsubscribe", async () => {

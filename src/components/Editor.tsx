@@ -190,6 +190,7 @@ export default function Editor({
 	const [drawer, setDrawer] = useState<"none" | "settings" | "revisions">(
 		"none",
 	);
+	const hasDrawer = !isScrapMode && drawer !== "none";
 	const [publishModalOpen, setPublishModalOpen] = useState(false);
 	const [previewMode, setPreviewMode] =
 		useState<PreviewMemberStatus>("default");
@@ -221,6 +222,7 @@ export default function Editor({
 	const changeFilterRef = useRef(createChangeFilter());
 	const editorErrorRef = useRef(false);
 	const activePostIdRef = useRef<string | undefined>(postId);
+	const titleRef = useRef<HTMLTextAreaElement | null>(null);
 	const excerptRef = useRef<HTMLTextAreaElement | null>(null);
 	const scrapRef = useRef<Scrap | null>(null);
 	const scrapSaveTimerRef = useRef<number | undefined>(undefined);
@@ -259,6 +261,7 @@ export default function Editor({
 		!readOnlyOverride;
 	const isReadOnlyRef = useRef(isReadOnly);
 	isReadOnlyRef.current = isReadOnly;
+	const mouseSelectingRef = useRef(false);
 
 	const [isDark, setIsDark] = useState(
 		() =>
@@ -286,15 +289,31 @@ export default function Editor({
 		return () => window.clearTimeout(timer);
 	}, [lexical]);
 
+	// The title is a borderless, auto-growing multi-line field.
+	useEffect(() => {
+		function resize() {
+			const el = titleRef.current;
+			if (!el) return;
+			el.style.height = "auto";
+			el.style.height = `${el.scrollHeight}px`;
+		}
+		resize();
+		window.addEventListener("resize", resize);
+		return () => window.removeEventListener("resize", resize);
+	}, [title, hasDrawer]);
+
 	// The excerpt is a borderless, auto-growing inline field.
 	useEffect(() => {
-		const el = excerptRef.current;
-		if (!el) {
-			return;
+		function resize() {
+			const el = excerptRef.current;
+			if (!el) return;
+			el.style.height = "auto";
+			el.style.height = `${el.scrollHeight}px`;
 		}
-		el.style.height = "auto";
-		el.style.height = `${el.scrollHeight}px`;
-	}, [meta.customExcerpt, showExcerpt]);
+		resize();
+		window.addEventListener("resize", resize);
+		return () => window.removeEventListener("resize", resize);
+	}, [meta.customExcerpt, showExcerpt, hasDrawer]);
 
 	// A broken feature image URL for one post must not suppress the image for
 	// the next post that reuses the same canvas.
@@ -915,6 +934,133 @@ export default function Editor({
 		};
 	}, [isScrapMode, flushScrapSave]);
 
+	// Typewriter mode: keeps the active line vertically centered in the viewport.
+	useEffect(() => {
+		if (!uiPrefs.typewriterMode) {
+			return;
+		}
+
+		let rafId: number | null = null;
+		let mouseUpTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+		function centerCaret() {
+			const activeEl = document.activeElement;
+			if (
+				!activeEl ||
+				!activeEl.closest(".editor-canvas [contenteditable='true']")
+			) {
+				return;
+			}
+			if (mouseSelectingRef.current) {
+				return;
+			}
+			const selection = window.getSelection();
+			if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) {
+				return;
+			}
+
+			const range = selection.getRangeAt(0);
+			const canvas = document.querySelector(".editor-canvas");
+			if (!canvas || !canvas.contains(range.commonAncestorContainer)) {
+				return;
+			}
+
+			const container = document.querySelector<HTMLElement>(".app-shell-body");
+			if (!container) {
+				return;
+			}
+
+			let caretRect = range.getBoundingClientRect();
+			if (
+				caretRect.height === 0 ||
+				(caretRect.top === 0 && caretRect.bottom === 0)
+			) {
+				const rects = range.getClientRects();
+				if (rects.length > 0) {
+					caretRect = rects[0];
+				} else {
+					const el =
+						range.startContainer instanceof Element
+							? range.startContainer
+							: range.startContainer.parentElement;
+					if (el) {
+						caretRect = el.getBoundingClientRect();
+					}
+				}
+			}
+
+			if (!caretRect || caretRect.height === 0) {
+				return;
+			}
+
+			const containerRect = container.getBoundingClientRect();
+			const caretCenterY = caretRect.top + caretRect.height / 2;
+			const caretRelativeY = caretCenterY - containerRect.top;
+			const targetY = container.clientHeight * 0.48;
+			const deltaY = caretRelativeY - targetY;
+
+			if (Math.abs(deltaY) >= 2) {
+				container.scrollTop += deltaY;
+			}
+		}
+
+		function scheduleCenter() {
+			if (rafId !== null) {
+				cancelAnimationFrame(rafId);
+			}
+			rafId = requestAnimationFrame(centerCaret);
+		}
+
+		function onMouseDown() {
+			if (mouseUpTimeoutId !== null) {
+				clearTimeout(mouseUpTimeoutId);
+				mouseUpTimeoutId = null;
+			}
+			mouseSelectingRef.current = true;
+		}
+
+		function onMouseUp() {
+			if (mouseUpTimeoutId !== null) {
+				clearTimeout(mouseUpTimeoutId);
+			}
+			mouseUpTimeoutId = setTimeout(() => {
+				mouseSelectingRef.current = false;
+				mouseUpTimeoutId = null;
+			}, 150);
+		}
+
+		function onInput() {
+			mouseSelectingRef.current = false;
+			scheduleCenter();
+		}
+
+		function onSelectionChange() {
+			if (mouseSelectingRef.current) {
+				return;
+			}
+			scheduleCenter();
+		}
+
+		document.addEventListener("selectionchange", onSelectionChange);
+		document.addEventListener("input", onInput);
+		document.addEventListener("mousedown", onMouseDown);
+		document.addEventListener("mouseup", onMouseUp);
+
+		return () => {
+			if (rafId !== null) {
+				cancelAnimationFrame(rafId);
+			}
+			if (mouseUpTimeoutId !== null) {
+				clearTimeout(mouseUpTimeoutId);
+			}
+			mouseSelectingRef.current = false;
+			document.removeEventListener("selectionchange", onSelectionChange);
+			document.removeEventListener("input", onInput);
+			document.removeEventListener("mousedown", onMouseDown);
+			document.removeEventListener("mouseup", onMouseUp);
+		};
+	}, [uiPrefs.typewriterMode]);
+
 	function markInteraction() {
 		changeFilterRef.current.markInteraction();
 	}
@@ -1353,7 +1499,6 @@ export default function Editor({
 	}
 
 	const canPublish = Boolean(post) && canPublishRole(site.role);
-	const hasDrawer = !isScrapMode && drawer !== "none";
 	const banner = isScrapMode ? null : versionBanner(site.version);
 	const documentId = post?.id ?? scrap?.id ?? "";
 	const initialLexical = scrap?.lexical ?? post?.lexical ?? "";
@@ -1552,7 +1697,11 @@ export default function Editor({
 					</div>
 				</header>
 
-				<div className="editor-canvas">
+				<div
+					className="editor-canvas"
+					data-editor-font={uiPrefs.editorFont}
+					data-typewriter={uiPrefs.typewriterMode ? "on" : undefined}
+				>
 					{banner && (
 						<div className="warn-banner">
 							<span>{banner}</span>
@@ -1658,11 +1807,27 @@ export default function Editor({
 						</figure>
 					)}
 
-					<input
+					<textarea
+						ref={titleRef}
 						className="title-input"
 						value={title}
 						onChange={e => handleTitle(e.target.value)}
+						onKeyDown={e => {
+							if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+								e.preventDefault();
+								if (showExcerpt && excerptRef.current) {
+									excerptRef.current.focus();
+								} else {
+									document
+										.querySelector<HTMLElement>(
+											".editor-canvas .koenig-lexical [contenteditable='true']",
+										)
+										?.focus();
+								}
+							}
+						}}
 						readOnly={isReadOnly}
+						rows={1}
 						placeholder={isScrapMode ? "Scrap title" : "Post title"}
 						data-testid="title-input"
 					/>
@@ -1719,7 +1884,8 @@ export default function Editor({
 								>
 									<KoenigEditor
 										onChange={handleBody}
-										placeholderText="Begin writing…"
+										placeholderText=""
+										placeholder={<></>}
 										readOnly={isReadOnly}
 									/>
 								</KoenigComposer>

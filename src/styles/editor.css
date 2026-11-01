@@ -1,7 +1,7 @@
 /*
  * Editor canvas — docs/design-system.md §3.3 and §4.5.
  *
- * A borderless, full-bleed writing surface: floating chrome, a single 740px
+ * A borderless, full-bleed writing surface: floating chrome, a single 780px
  * measure, and no card, border, or header panel around the document. All
  * legacy App.css rules are overridden by doubled class selectors because
  * App.css is still imported after this file (see index.css).
@@ -43,13 +43,17 @@
 	color: var(--fg-primary);
 }
 
-/* The measure: min(740px, 100% - 48px), centered. */
+/* The measure: min(780px, 100% - 48px), centered. */
 .editor-canvas {
 	width: min(var(--editor-measure), calc(100% - (var(--space-6) * 2)));
 	max-width: var(--editor-measure);
 	margin: 0 auto;
 	padding: var(--space-8) 0 var(--space-24);
 	box-sizing: border-box;
+}
+
+.editor-canvas[data-typewriter="on"] {
+	padding-bottom: min(60vh, 600px);
 }
 
 /* ---------------------------------------------------------------------------
@@ -306,6 +310,8 @@
 	font-weight: 700;
 	line-height: 1.1;
 	letter-spacing: -0.017em;
+	resize: none;
+	overflow: hidden;
 }
 
 .editor-canvas .title-input::placeholder {
@@ -428,7 +434,7 @@
 }
 
 .app-shell[data-focus="on"] .editor-header {
-	background: none;
+	background: var(--bg-canvas);
 }
 
 .app-shell[data-focus="on"] .editor-actions {

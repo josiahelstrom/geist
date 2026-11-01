@@ -37,7 +37,7 @@ The resulting rule set:
    Shadows are reserved for floating sheets and the sidebar card.
 4. **Compact but not cramped.** 32px controls, 13px UI type, 8px rhythm. Density follows
    macOS sidebars, not web admin panels.
-5. **One measure.** Long-form text never exceeds 740px, regardless of window width.
+5. **One measure.** Long-form text never exceeds 780px, regardless of window width.
 
 ### 1.1 Ghost 6.68 Admin & Editor
 
@@ -54,7 +54,7 @@ From `Ghost Admin Panel.png` and `Ghost Editor_1–2.png`:
 | Top-left | `←` back arrow and `Draft - Saved` save state floating directly on the surface | Floating top-left bar at the same baseline |
 | Top-right | `Preview`, green `Publish`, and the sidebar/settings toggle icon | Floating top-right bar; add History clock icon for revisions |
 | Bottom-right | `123 words`, low-contrast, floating | Floating word count, no footer chrome |
-| Prose | Serif body, sans-serif title, generous measure, visible vertical rhythm | `--font-serif`, 48px sans title, 740px measure |
+| Prose | Serif body, sans-serif title, generous measure, visible vertical rhythm | `--font-serif`, 48px sans title, 780px measure |
 
 The important lesson from Ghost is **not** the web Admin chrome. It is that the editor
 works because everything except the writing is allowed to float and disappear.
@@ -84,13 +84,13 @@ From `apple notes.png` and the macOS 27 UI Kit:
 
 From `ulysses_1–4.png`:
 
-- **Calm writing column.** Prose uses a `740px` max measure; the eye never tracks a
+- **Calm writing column.** Prose uses a `780px` max measure; the eye never tracks a
   long line.
 - **Collapsible navigation.** The library rail can disappear, leaving the sheet list and
   editor.
 - **Right-hand inspector drawer.** A `300px` drawer for suggestions/notes/revisions in
   Ulysses; Geist uses `320px` for post metadata and revisions (§4.6).
-- **Focus mode.** `Cmd+\` enters distraction-free writing. Optionally, chrome fades
+- **Focus mode.** `⌘⇧F` / `Cmd+Shift+F` enters distraction-free writing. Optionally, chrome fades
   while typing and returns on pointer/key activity. The text itself never moves.
 - **Quiet selection.** Selected rows use a solid macOS accent fill, not a colored border.
 
@@ -100,7 +100,7 @@ From `ulysses_1–4.png`:
 | --- | --- | --- | --- | --- |
 | Navigation | Full site admin | Compact source list | Collapsible library | 260px floating rail, Posts group, collapsible |
 | List | Dense rows + thumbs | Note rows + snippet | Sheet rows + snippet | 16:10 thumb, 14px title, 12px byline |
-| Editor | Borderless canvas | Inset paper | 740px column | Full-bleed canvas, 740px column |
+| Editor | Borderless canvas | Inset paper | 780px column | Full-bleed canvas, 780px column |
 | Chrome | Floating text actions | Overlay titlebar + glass | Minimal, fades | Floating bars, overlay titlebar, auto-fade |
 | Inspector | Post settings drawer | Disclosure sections | 300px drawer | 320px drawer, 28/32px controls |
 | Color | Neutral + green/magenta | System materials | Neutral | Neutral + status only |
@@ -299,7 +299,7 @@ Rules:
 - Do not use `font-smoothing` overrides other than the existing
   `-webkit-font-smoothing: antialiased`; macOS handles the rest.
 
-### 3.3 Ghost 6.68 editor scale (740px centered column)
+### 3.3 Ghost 6.68 editor scale (780px centered column)
 
 | Element | Specification |
 | --- | --- |
@@ -309,7 +309,7 @@ Rules:
 
 Editor rules:
 
-- The column is `min(740px, calc(100% - 48px))`, centered. The title may wrap to two or
+- The column is `min(780px, calc(100% - 48px))`, centered. The title may wrap to two or
   three lines; it never exceeds the measure.
 - The excerpt is an inline, borderless field. It is not a textarea card. A non-empty
   excerpt always renders; when the excerpt is empty the row is hidden unless the
@@ -389,7 +389,7 @@ writing measure intact instead of squeezing a list, an editor, and an inspector 
 │ │ Navigation     │  │ Workspace                    │  │ Inspector         │ │
 │ │ rail 260px     │  │ Library: post list           │  │ 320px (when open) │ │
 │ │ card inset 8px │  │ Writing: full-bleed editor   │  │ metadata / history│ │
-│ │ radius 12px    │  │ 740px measure + floating bars│  │ / publish sheet   │ │
+│ │ radius 12px    │  │ 780px measure + floating bars│  │ / publish sheet   │ │
 │ └────────────────┘  └──────────────────────────────┘  └───────────────────┘ │
 │  8px                                                 8px                    │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -398,7 +398,7 @@ writing measure intact instead of squeezing a list, an editor, and an inspector 
 - Grid: `260px | minmax(0, 1fr) | auto`. The middle workspace is either the post list
   or the editor; the inspector occupies the right `320px` when open.
 - The inspector docks at `320px` and reduces the editor width; it always slides in from
-  the right edge rather than covering the text. The editor measure is capped at `740px`
+  the right edge rather than covering the text. The editor measure is capped at `780px`
   and gracefully narrows below that.
 - The rail and workspace are separated by an `8px` gutter. The editor pane has no
   gutter: its `--bg-canvas` runs to the window edge and under the floating controls.
@@ -410,8 +410,8 @@ Layout cascade (normative):
 
 | Width | Rail | Workspace | Inspector |
 | --- | --- | --- | --- |
-| `≥ 1440px` | docked `260px` | Library list `340px`, or editor with full `740px` measure | docked `320px`; measure preserved |
-| `1120–1439px` | docked `260px` | Library list `320px`, or editor | docked `320px`; measure narrows below `740px` |
+| `≥ 1440px` | docked `260px` | Library list `340px`, or editor with full `780px` measure | docked `320px`; measure preserved |
+| `1120–1439px` | docked `260px` | Library list `320px`, or editor | docked `320px`; measure narrows below `780px` |
 | `960–1119px` | overlay, toggleable | Library list `300px`, or editor | docked `320px`; measure narrows |
 | Focus mode (any width) | hidden | editor full window | hidden until toggled |
 
@@ -425,7 +425,7 @@ Layout cascade (normative):
 | Card border | `1px solid var(--border-default)` |
 | Card surface | `--bg-sidebar` over native vibrancy |
 | Card shadow | `0 1px 2px rgba(0, 0, 0, 0.04)`, no large drop shadow |
-| Collapse | `Cmd+\` or the sidebar toggle button |
+| Collapse | `⌘\` / `Cmd+\` or the sidebar toggle button |
 | Item height | `32px` |
 | Item radius | `6px` |
 | Item padding | `0 10px` |
@@ -571,8 +571,7 @@ Floating bottom-right:
 
 Focus mode:
 
-- `Cmd+\` is contextual: it toggles the navigation rail in the Library and focus
-  mode in the editor, where `Esc` is the only exit.
+- `⌘⇧F` / `Cmd+Shift+F` toggles focus mode in the editor (`⌘\` / `Cmd+\` toggles the navigation rail), where `Esc` is the only exit.
 - Focus mode hides the titlebar identity, the titlebar action pill, the back
   button, the editor's right-hand action cluster, the inspector, and the update
   banner. It also removes the chrome borders; the traffic lights, the drag strip,
@@ -651,7 +650,7 @@ src/
     base.css            # reset, scrollbars, selection, focus ring, color-scheme
     chrome.css          # drag region, rail, glass pills, window edges
     posts.css           # post list header, rows, thumbnails, empty state
-    editor.css          # 740px canvas, floating bars, Koenig overrides
+    editor.css          # 780px canvas, floating bars, Koenig overrides
     inspector.css       # drawer, disclosure sections, publish sheet
   components/
     AppShell.tsx        # window chrome, grid, focus mode, drawer orchestration
@@ -671,7 +670,7 @@ src/
     editor/
       Editor.tsx        # state, autosave, Koenig, preview/publish actions
       EditorTopBar.tsx  # floating left/right clusters
-      EditorCanvas.tsx  # 740px column, feature image, title, excerpt, divider
+      EditorCanvas.tsx  # 780px column, feature image, title, excerpt, divider
       FeatureImage.tsx
       WordCount.tsx
     inspector/
@@ -750,7 +749,7 @@ These accompany the color tokens in `tokens.css`:
   --rail-width: 260px;
   --rail-inset: 8px;
   --list-min-width: 300px;
-  --editor-measure: 740px;
+  --editor-measure: 780px;
   --inspector-width: 320px;
 
   --row-height: 32px;
@@ -859,8 +858,8 @@ Rules:
 
 | Action | Shortcut / behavior |
 | --- | --- |
-| Toggle focus mode | `Cmd+\` in the editor; toggles the navigation rail in the Library |
-| Toggle navigation rail | Sidebar toggle button (focusable, `aria-expanded`) |
+| Toggle focus mode | `⌘⇧F` / `Cmd+Shift+F` in the editor |
+| Toggle navigation rail | `⌘\` / `Cmd+\` or sidebar toggle button (focusable, `aria-expanded`) |
 | Save revision | `Cmd+S` (existing) |
 | Close drawer / sheet | `Esc`, restores focus to the trigger |
 | Move through nav | `Up`/`Down` within the sidebar, `Tab` between regions |
@@ -895,6 +894,6 @@ Requirements:
 - [ ] Reduced Motion: drawer opens instantly, focus-mode bars do not fade.
 - [ ] Keyboard-only pass: focus visible on every control; `Esc` closes every overlay.
 - [ ] The 78×52 traffic-light gutter is clear at 960×640 and 1280×820.
-- [ ] The 740px measure is preserved at 1280px or wider with the inspector closed, and
+- [ ] The 780px measure is preserved at 1280px or wider with the inspector closed, and
       narrows without clipping when the inspector is open.
 - [ ] The newsletter recipient count appears before the publish confirmation.

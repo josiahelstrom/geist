@@ -14,11 +14,24 @@
     display: none !important;
 }
 
+.editor-canvas,
+.editor-canvas[data-editor-font="serif"] {
+	--editor-font-body: var(--font-serif);
+}
+
+.editor-canvas[data-editor-font="sans"] {
+	--editor-font-body: var(--font-sans);
+}
+
+.editor-canvas[data-editor-font="mono"] {
+	--editor-font-body: var(--font-mono);
+}
+
 .koenig-lexical {
 	--kg-accent-color: var(--status-publish);
 	background: transparent;
 	color: var(--fg-primary);
-	font-family: var(--font-serif);
+	font-family: var(--editor-font-body);
 	font-size: 20px;
 	line-height: 1.6;
 	letter-spacing: 0.1px;
@@ -37,7 +50,7 @@
 .koenig-lexical .kg-prose ul,
 .koenig-lexical .kg-prose ol {
 	margin-top: 1.6rem;
-	font-family: var(--font-serif);
+	font-family: var(--editor-font-body);
 	font-size: 20px; /* 1.25rem @ 16px */
 	font-weight: 400;
 	line-height: 1.6;
@@ -46,7 +59,7 @@
 }
 
 .koenig-lexical .kg-prose li {
-	font-family: var(--font-serif);
+	font-family: var(--editor-font-body);
 	font-size: 20px; /* 1.25rem @ 16px */
 	font-weight: 400;
 	line-height: 1.6;
@@ -140,7 +153,7 @@
 	border-radius: 0;
 	background: transparent;
 	color: var(--fg-primary);
-	font-family: var(--font-serif);
+	font-family: var(--editor-font-body);
 	font-style: italic;
 }
 
@@ -332,12 +345,10 @@
 	font-family: var(--font-sans);
 }
 
-/* Placeholder is UI chrome, not prose. */
+/* Placeholder is hidden: eliminate "Begin writing..." */
 .koenig-lexical .kg-prose .placeholder,
 .koenig-lexical .kg-prose [data-placeholder]::after {
-	color: var(--fg-tertiary);
-	font-family: var(--font-serif);
-	opacity: 1;
+	display: none !important;
 }
 
 /* ---------------------------------------------------------------------------

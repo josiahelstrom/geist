@@ -441,6 +441,15 @@
  * update banner are removed.
  * ------------------------------------------------------------------------- */
 
+.app-shell[data-focus="on"] {
+	background-color: var(--bg-canvas);
+}
+
+.app-shell[data-focus="on"] .titlebar {
+	background: var(--bg-canvas);
+	border: none;
+}
+
 .app-shell[data-focus="on"] .titlebar-identity,
 .app-shell[data-focus="on"] .titlebar-actions,
 .app-shell[data-focus="on"] .update-banner {

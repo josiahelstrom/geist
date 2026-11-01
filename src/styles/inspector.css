@@ -394,6 +394,62 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * Segmented controls (Typography, options)
+ * ------------------------------------------------------------------------- */
+
+.inspector .inspector-segmented {
+	display: flex;
+	gap: 2px;
+	padding: 2px;
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-md);
+	background: var(--bg-row-hover);
+}
+
+.inspector .inspector-segment {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 1 1 0;
+	min-width: 0;
+	height: 26px;
+	padding: 0 var(--space-2);
+	border-radius: var(--radius-sm);
+	color: var(--fg-secondary);
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 1;
+	cursor: pointer;
+	user-select: none;
+	-webkit-user-select: none;
+	transition: background-color var(--motion-duration) var(--motion-ease),
+		color var(--motion-duration) var(--motion-ease);
+}
+
+.inspector .inspector-segment input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.inspector .inspector-segment:has(input:checked) {
+	background: var(--bg-elevated);
+	color: var(--fg-primary);
+	box-shadow: var(--shadow-card);
+}
+
+.inspector .inspector-segment:has(input:focus-visible) {
+	outline: 2px solid var(--accent-primary-bg);
+	outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------------------
  * Chips (tags, authors, tiers)
  * ------------------------------------------------------------------------- */
 

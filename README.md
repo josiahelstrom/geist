@@ -181,8 +181,8 @@ v0.5.0 "Native" rebuilds the shell around macOS: a vibrancy-backed window with a
 overlay title bar (hidden title, inset traffic lights), a native menu bar
 (Geist/File/Edit/View/Window) whose commands are routed into the UI, and a three-pane
 layout of navigation rail, post list and inspector — each pane collapsible from the title
-bar or with `Cmd+\`, `Cmd+Alt+I`, `Cmd+N` and `Cmd+S`. `Cmd+\` is contextual: it collapses
-the rail in the Library and toggles focus mode in the editor, where `Esc` is the only way
+bar or with `Cmd+\`, `Cmd+Shift+F`, `Cmd+Alt+I`, `Cmd+N` and `Cmd+S`. `Cmd+\` collapses
+the navigation rail, while `Cmd+Shift+F` (`⌘⇧F`) toggles focus mode in the editor, where `Esc` is the only way
 out. The editor canvas is borderless and
 the Koenig typography, chrome and inspector are themed entirely by CSS tokens, with
 system/light/dark appearance cycling from the title bar or `Cmd+Shift+L`. The inspector's
