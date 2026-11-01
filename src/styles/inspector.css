@@ -11,6 +11,7 @@
  * ------------------------------------------------------------------------- */
 
 .inspector.inspector {
+	--inspector-fg-hint: #657483;
 	display: flex;
 	flex-direction: column;
 	width: var(--inspector-width);
@@ -30,6 +31,10 @@
 	border-left: 1px solid var(--border-default);
 	color: var(--fg-primary);
 	animation: inspector-slide-in var(--motion-duration) var(--motion-ease);
+}
+
+html.dark .inspector.inspector {
+	--inspector-fg-hint: var(--fg-secondary);
 }
 
 .inspector.revisions-drawer {
@@ -170,14 +175,14 @@
 	margin: 0;
 	font-size: 11px;
 	line-height: 1.4;
-	color: var(--fg-muted);
+	color: var(--inspector-fg-hint);
 }
 
 .inspector .inspector-error {
 	margin: 0;
 	padding: 6px 8px;
 	border-radius: var(--radius-md);
-	background: color-mix(in srgb, var(--status-danger) 10%, transparent);
+	background: rgba(245, 11, 35, 0.1);
 	color: var(--status-danger);
 	font-size: 12px;
 	line-height: 1.4;
@@ -244,8 +249,7 @@
 .inspector.inspector .inspector-input:focus-visible,
 .inspector.inspector .inspector-select:focus-visible,
 .inspector.inspector .inspector-textarea:focus-visible {
-	outline: 2px solid
-		color-mix(in srgb, var(--accent-primary-bg) 30%, transparent);
+	outline: 2px solid var(--border-strong);
 	outline-offset: 1px;
 }
 
@@ -294,8 +298,7 @@
 }
 
 .inspector.inspector button:focus-visible {
-	outline: 2px solid
-		color-mix(in srgb, var(--accent-primary-bg) 30%, transparent);
+	outline: 2px solid var(--border-strong);
 	outline-offset: 1px;
 }
 
@@ -341,12 +344,12 @@
 
 .inspector.inspector button.inspector-danger-button {
 	background: transparent;
-	border-color: color-mix(in srgb, var(--status-danger) 30%, transparent);
+	border-color: rgba(245, 11, 35, 0.3);
 	color: var(--status-danger);
 }
 
 .inspector.inspector button.inspector-danger-button:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--status-danger) 10%, transparent);
+	background: rgba(245, 11, 35, 0.1);
 }
 
 .inspector.inspector button.inspector-upload {
@@ -691,8 +694,13 @@
 
 .inspector .revision-badge.is-published {
 	color: var(--status-publish);
-	border-color: color-mix(in srgb, var(--status-publish) 40%, transparent);
-	background: color-mix(in srgb, var(--status-publish) 10%, transparent);
+	border-color: rgba(48, 207, 67, 0.4);
+	background: rgba(48, 207, 67, 0.1);
+}
+
+html.dark .inspector .revision-badge.is-published {
+	border-color: rgba(88, 218, 103, 0.4);
+	background: rgba(88, 218, 103, 0.1);
 }
 
 .inspector .revision-preview {

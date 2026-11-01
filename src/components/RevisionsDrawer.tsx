@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import type {PostRevision} from "../lib/api";
 import {
 	extractLexicalPlainText,
@@ -49,6 +49,9 @@ function formatTimestamp(value: string): string {
 	});
 }
 
+const FOCUSABLE_SELECTOR =
+	'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export default function RevisionsDrawer({
 	revisions,
 	readOnly = false,
@@ -59,6 +62,56 @@ export default function RevisionsDrawer({
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const selected =
 		sorted.find(revision => revision.id === selectedId) ?? sorted[0] ?? null;
+
+	const drawerRef = useRef<HTMLElement | null>(null);
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
+
+	useEffect(() => {
+		const trigger = document.activeElement as HTMLElement | null;
+		const drawer = drawerRef.current;
+		drawer?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+
+		function handleKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape") {
+				event.preventDefault();
+				onCloseRef.current();
+				return;
+			}
+			if (event.key !== "Tab" || !drawer) {
+				return;
+			}
+			const focusable = Array.from(
+				drawer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+			).filter(
+				el =>
+					!el.hidden &&
+					el.style.display !== "none" &&
+					el.getAttribute("aria-hidden") !== "true",
+			);
+			if (focusable.length === 0) {
+				return;
+			}
+			const first = focusable[0];
+			const last = focusable[focusable.length - 1];
+			const active = document.activeElement;
+			if (event.shiftKey && active === first) {
+				event.preventDefault();
+				last.focus();
+			} else if (!event.shiftKey && active === last) {
+				event.preventDefault();
+				first.focus();
+			}
+		}
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => {
+			window.removeEventListener("keydown", handleKeyDown);
+			if (trigger && document.contains(trigger)) {
+				trigger.focus();
+			}
+		};
+	}, []);
 
 	function handleRestore() {
 		if (!selected || readOnly) {
@@ -74,12 +127,15 @@ export default function RevisionsDrawer({
 
 	return (
 		<aside
+			ref={drawerRef}
 			className="inspector revisions-drawer"
 			data-testid="revisions-drawer"
-			aria-label="Post history"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="revisions-drawer-title"
 		>
 			<header className="inspector-header">
-				<h2 className="inspector-title">Post history</h2>
+				<h2 id="revisions-drawer-title" className="inspector-title">Post history</h2>
 				<button
 					type="button"
 					className="inspector-close"

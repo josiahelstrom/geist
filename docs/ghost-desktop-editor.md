@@ -599,19 +599,8 @@ images included.
 
 ## 12. Roadmap after the weekend
 
-> **Superseded.** The official roadmap is maintained in
-> [`docs/architecture.md`](./architecture.md). It is reproduced here so this historical
-> document stays self-contained.
-
-| Version | Status | Contents |
-|---|---|---|
-| v0.1.0 – v0.4.0 | Shipped | Core editor, metadata sidebar, cards parity, theming, publishing/scheduling modal, newsletter safety gate, post visibility/tiers, revisions drawer |
-| v0.5.0 Native | Active | Full macOS design system (`docs/design-system.md`), 3-pane rail, borderless canvas, Koenig retheme |
-| v0.6.0 Auth | Planned | Password login in Rust, session cookie, 2FA verification code, Staff Access Token auto-retrieval, token rotation |
-| v0.7.0 Scraps | Planned | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
-| v0.8.0 Feature Complete | Planned | Offline draft cache, local autosave queue, edge-case hardening |
-| v1.0.0-rc.1 Release Candidate | Planned | Apple code signing & notarization, `tauri-plugin-updater` with GitHub Releases, DMG & Windows installers |
-| v1.0.0 General Availability | Planned | First official public release |
+> The active project roadmap and completed version history are maintained in
+> [`docs/architecture.md`](./architecture.md). See that document for current and future milestones.
 
 ---
 

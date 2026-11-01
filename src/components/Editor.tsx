@@ -61,6 +61,7 @@ import {
 } from "../lib/scraps";
 import {shouldShowExcerpt, useUiPrefs} from "../lib/uiPrefs";
 import {versionBanner, shouldEnforceReadOnly} from "../lib/version";
+import {canDestroyAfterFlush, shouldBlockUnload} from "../lib/closeGuard";
 import EditorErrorBoundary from "./EditorErrorBoundary";
 import MetadataSidebar, {type PostMetadataState} from "./MetadataSidebar";
 import PublishModal, {type PublishAction} from "./PublishModal";
@@ -205,6 +206,13 @@ export default function Editor({
 	const [errorStatus, setErrorStatus] = useState<number | undefined>();
 	const [conflict, setConflict] = useState(false);
 	const [publishing, setPublishing] = useState(false);
+	// siteRef keeps the latest site object (e.g. after site hydration updates
+	// credentials or clock offset) available to the saver and API calls without
+	// triggering refetches or re-binding the post when the site object identity changes.
+	const siteRef = useRef(site);
+	siteRef.current = site;
+	const publishingRef = useRef(false);
+	publishingRef.current = publishing;
 	const [demoting, setDemoting] = useState(false);
 	const [readOnlyOverride, setReadOnlyOverride] = useState(false);
 	const [lexical, setLexical] = useState<string>("");
@@ -217,6 +225,13 @@ export default function Editor({
 	const [offlineCachedAt, setOfflineCachedAt] = useState<string | null>(null);
 
 	const saverRef = useRef<ReturnType<typeof createSaver> | null>(null);
+	useEffect(
+		() => () => {
+			const s = saverRef.current;
+			if (s?.hasPending) void s.flush().catch(() => {});
+		},
+		[],
+	);
 	/** Latest known post, including patches the saver has not round-tripped. */
 	const postRef = useRef<PostDetail | null>(null);
 	const changeFilterRef = useRef(createChangeFilter());
@@ -262,6 +277,7 @@ export default function Editor({
 	const isReadOnlyRef = useRef(isReadOnly);
 	isReadOnlyRef.current = isReadOnly;
 	const mouseSelectingRef = useRef(false);
+	const isComposingRef = useRef(false);
 
 	const [isDark, setIsDark] = useState(
 		() =>
@@ -291,28 +307,72 @@ export default function Editor({
 
 	// The title is a borderless, auto-growing multi-line field.
 	useEffect(() => {
+		const el = titleRef.current;
+		if (!el) return;
 		function resize() {
-			const el = titleRef.current;
 			if (!el) return;
 			el.style.height = "auto";
 			el.style.height = `${el.scrollHeight}px`;
 		}
 		resize();
+
+		const parent = el.parentElement;
+		let observer: ResizeObserver | null = null;
+		let lastWidth = parent ? parent.getBoundingClientRect().width : -1;
+
+		if (parent && typeof ResizeObserver !== "undefined") {
+			observer = new ResizeObserver(entries => {
+				for (const entry of entries) {
+					const width = entry.contentRect.width;
+					if (width !== lastWidth) {
+						lastWidth = width;
+						resize();
+					}
+				}
+			});
+			observer.observe(parent);
+		}
+
 		window.addEventListener("resize", resize);
-		return () => window.removeEventListener("resize", resize);
+		return () => {
+			window.removeEventListener("resize", resize);
+			observer?.disconnect();
+		};
 	}, [title, hasDrawer]);
 
 	// The excerpt is a borderless, auto-growing inline field.
 	useEffect(() => {
+		const el = excerptRef.current;
+		if (!el) return;
 		function resize() {
-			const el = excerptRef.current;
 			if (!el) return;
 			el.style.height = "auto";
 			el.style.height = `${el.scrollHeight}px`;
 		}
 		resize();
+
+		const parent = el.parentElement;
+		let observer: ResizeObserver | null = null;
+		let lastWidth = parent ? parent.getBoundingClientRect().width : -1;
+
+		if (parent && typeof ResizeObserver !== "undefined") {
+			observer = new ResizeObserver(entries => {
+				for (const entry of entries) {
+					const width = entry.contentRect.width;
+					if (width !== lastWidth) {
+						lastWidth = width;
+						resize();
+					}
+				}
+			});
+			observer.observe(parent);
+		}
+
 		window.addEventListener("resize", resize);
-		return () => window.removeEventListener("resize", resize);
+		return () => {
+			window.removeEventListener("resize", resize);
+			observer?.disconnect();
+		};
 	}, [meta.customExcerpt, showExcerpt, hasDrawer]);
 
 	// A broken feature image URL for one post must not suppress the image for
@@ -338,7 +398,8 @@ export default function Editor({
 			setEditorError(null);
 			editorErrorRef.current = false;
 			changeFilterRef.current.reset();
-			saverRef.current = createSaver(site, p.id, p.updated_at, {
+			saverRef.current?.halt();
+			saverRef.current = createSaver(siteRef.current, p.id, p.updated_at, {
 				onStatus: (s, message) => {
 					setStatus(s);
 					setStatusMessage(message);
@@ -352,7 +413,9 @@ export default function Editor({
 					// any already-cached pending patch under the new edits.
 					let existingPatch: Partial<PostDetail> = {};
 					try {
-						const cached = await getCachedDraft(site.base, p.id);
+						const cached = await getCachedDraft(site.base, p.id, {
+							touch: false,
+						});
 						if (cached?.pendingPatch) {
 							existingPatch = cached.pendingPatch;
 						}
@@ -393,7 +456,9 @@ export default function Editor({
 				},
 			});
 		},
-		[site],
+		// Depends on site.base and postId rather than site identity so site
+		// hydration doesn't recreate bindPost and wipe out in-progress typing.
+		[site.base, postId],
 	);
 
 	const bindScrap = useCallback((s: Scrap) => {
@@ -450,12 +515,11 @@ export default function Editor({
 			};
 		}
 
-		fetchPost(site, postId)
+		fetchPost(siteRef.current, postId)
 			.then(async p => {
 				if (cancelled) {
 					return;
 				}
-				bindPost(p);
 				// Keep a local copy so the post can be reopened offline.
 				try {
 					const cached = await getCachedDraft(site.base, p.id);
@@ -463,17 +527,38 @@ export default function Editor({
 						return;
 					}
 					if (cached?.dirty && cached.pendingPatch) {
-						// Local edits are newer than the server copy: replay them
-						// rather than overwriting the dirty cache with a clean one.
+						// Local edits are newer than the server copy: open on them
+						// and replay them to the server.
+						const merged = {
+							...p,
+							...cached.pendingPatch,
+						} as PostDetail;
+						bindPost(merged);
+						setEditorVersion(v => v + 1);
+						changeFilterRef.current.reset();
 						saverRef.current?.queue(
 							cached.pendingPatch as Record<string, unknown>,
 						);
 						await saverRef.current?.flush();
+						if (
+							!saverRef.current?.hasPending &&
+							!saverRef.current?.lastError &&
+							!saverRef.current?.conflict
+						) {
+							await cacheDraft(
+								site.base,
+								postRef.current ?? merged,
+							);
+						}
 					} else {
+						bindPost(p);
 						await cacheDraft(site.base, p);
 					}
 				} catch {
 					/* Caching is best-effort; the editor still works without it. */
+					if (!cancelled && !postRef.current) {
+						bindPost(p);
+					}
 				}
 			})
 			.catch(async err => {
@@ -516,7 +601,9 @@ export default function Editor({
 		return () => {
 			cancelled = true;
 		};
-	}, [site, postId, scrapId, bindPost, bindScrap]);
+		// Depends on site.base and postId rather than site identity so site
+		// hydration doesn't re-run the fetch and wipe out in-progress typing.
+	}, [site.base, postId, scrapId, bindPost, bindScrap]);
 
 	// When the connection comes back, push any edits that were saved locally
 	// while offline. 409 still wins: the saver halts rather than clobbering.
@@ -560,26 +647,42 @@ export default function Editor({
 			return;
 		}
 		let cancelled = false;
-		listSiteTags(site).then(tags => {
-			if (!cancelled) {
-				setSiteTags(tags);
-			}
-		});
-		listSiteAuthors(site).then(authors => {
-			if (!cancelled) {
-				setSiteAuthors(authors);
-			}
-		});
-		listSiteTiers(site).then(tiers => {
-			if (!cancelled) {
-				setSiteTiers(tiers);
-			}
-		});
-		listActiveNewsletters(site).then(list => {
-			if (!cancelled) {
-				setNewsletters(list);
-			}
-		});
+		listSiteTags(site)
+			.then(tags => {
+				if (!cancelled) {
+					setSiteTags(tags);
+				}
+			})
+			.catch(() => {
+				/* Secondary metadata: keep existing tags on failure */
+			});
+		listSiteAuthors(site)
+			.then(authors => {
+				if (!cancelled) {
+					setSiteAuthors(authors);
+				}
+			})
+			.catch(() => {
+				/* Secondary metadata: keep existing authors on failure */
+			});
+		listSiteTiers(site)
+			.then(tiers => {
+				if (!cancelled) {
+					setSiteTiers(tiers);
+				}
+			})
+			.catch(() => {
+				/* Secondary metadata: keep existing tiers on failure */
+			});
+		listActiveNewsletters(site)
+			.then(list => {
+				if (!cancelled) {
+					setNewsletters(list);
+				}
+			})
+			.catch(() => {
+				/* Secondary metadata: keep existing newsletters on failure */
+			});
 		return () => {
 			cancelled = true;
 		};
@@ -587,7 +690,11 @@ export default function Editor({
 
 	const refreshSnippets = useCallback(() => {
 		if (site.keyKind === "staff") {
-			listSnippets(site).then(setSnippets);
+			listSnippets(site)
+				.then(setSnippets)
+				.catch(() => {
+					/* Secondary metadata: keep existing snippets on failure */
+				});
 		}
 	}, [site]);
 
@@ -626,17 +733,25 @@ export default function Editor({
 		let cancelled = false;
 		setSettings(DEFAULT_SETTINGS);
 		setSnippets([]);
-		loadSiteSettings(site).then(s => {
-			if (!cancelled) {
-				setSettings(s);
-			}
-		});
-		if (site.keyKind === "staff") {
-			listSnippets(site).then(list => {
+		loadSiteSettings(site)
+			.then(s => {
 				if (!cancelled) {
-					setSnippets(list);
+					setSettings(s);
 				}
+			})
+			.catch(() => {
+				/* Secondary metadata: keep default/existing settings on failure */
 			});
+		if (site.keyKind === "staff") {
+			listSnippets(site)
+				.then(list => {
+					if (!cancelled) {
+						setSnippets(list);
+					}
+				})
+				.catch(() => {
+					/* Secondary metadata: keep existing snippets on failure */
+				});
 		}
 		return () => {
 			cancelled = true;
@@ -822,7 +937,10 @@ export default function Editor({
 				}
 				saverRef.current
 					?.flush(true)
-					.then(() => postId && refreshRevisions(postId));
+					.then(() => postId && refreshRevisions(postId))
+					.catch(() => {
+						/* Saver surfaces status and user feedback on failure */
+					});
 			}
 		}
 		window.addEventListener("keydown", onKeyDown);
@@ -846,7 +964,10 @@ export default function Editor({
 					() =>
 						activePostIdRef.current &&
 						refreshRevisions(activePostIdRef.current),
-				);
+				)
+				.catch(() => {
+					/* Saver surfaces status and user feedback on failure */
+				});
 		}
 		window.addEventListener("geist:save-revision", onSaveRevision);
 		return () =>
@@ -872,24 +993,34 @@ export default function Editor({
 						saveStatus === "dirty" ||
 						(saveStatus as string) === "unsaved" ||
 						saveStatus === "error";
-					if (!unsaved) {
+					if (
+						shouldBlockUnload({
+							hasPending: unsaved,
+							conflict: false,
+						}) === "close"
+					) {
 						return; // nothing to lose
 					}
 					event.preventDefault();
 					const save = window.confirm(
 						"You have unsaved edits in this scrap. Save them before closing?",
 					);
+					if (!save) {
+						return;
+					}
 					try {
-						if (save) {
-							await flushScrapSave();
-							if (
-								Object.keys(pendingScrapPatchRef.current)
-									.length > 0
-							) {
-								// Still unsaved (e.g. disk error): leave the
-								// window open rather than discard the work.
-								return;
-							}
+						await flushScrapSave();
+						if (
+							!canDestroyAfterFlush({
+								hasPending:
+									Object.keys(pendingScrapPatchRef.current)
+										.length > 0,
+								conflict: false,
+							})
+						) {
+							// Still unsaved (e.g. disk error): leave the
+							// window open rather than discard the work.
+							return;
 						}
 						await getCurrentWindow().destroy().catch(() => {});
 					} catch {
@@ -900,16 +1031,31 @@ export default function Editor({
 				}
 
 				const saver = saverRef.current;
-				if (!saver?.hasPending || saver.conflict) {
+				if (
+					!saver ||
+					shouldBlockUnload({
+						hasPending: saver.hasPending,
+						conflict: saver.conflict,
+					}) === "close"
+				) {
 					return; // nothing to lose
 				}
 				event.preventDefault();
 				const save = window.confirm(
 					"This post has unsaved changes.\n\nSave before closing?",
 				);
+				if (!save) {
+					return;
+				}
 				try {
-					if (save) {
-						await saver.flush();
+					await saver.flush();
+					if (
+						!canDestroyAfterFlush({
+							hasPending: saver.hasPending,
+							conflict: saver.conflict,
+						})
+					) {
+						return;
 					}
 					await getCurrentWindow().destroy().catch(() => {});
 				} catch {
@@ -944,6 +1090,9 @@ export default function Editor({
 		let mouseUpTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 		function centerCaret() {
+			if (isComposingRef.current) {
+				return;
+			}
 			const activeEl = document.activeElement;
 			if (
 				!activeEl ||
@@ -1041,10 +1190,21 @@ export default function Editor({
 			scheduleCenter();
 		}
 
+		function onCompositionStart() {
+			isComposingRef.current = true;
+		}
+
+		function onCompositionEnd() {
+			isComposingRef.current = false;
+			scheduleCenter();
+		}
+
 		document.addEventListener("selectionchange", onSelectionChange);
 		document.addEventListener("input", onInput);
 		document.addEventListener("mousedown", onMouseDown);
 		document.addEventListener("mouseup", onMouseUp);
+		document.addEventListener("compositionstart", onCompositionStart);
+		document.addEventListener("compositionend", onCompositionEnd);
 
 		return () => {
 			if (rafId !== null) {
@@ -1054,10 +1214,13 @@ export default function Editor({
 				clearTimeout(mouseUpTimeoutId);
 			}
 			mouseSelectingRef.current = false;
+			isComposingRef.current = false;
 			document.removeEventListener("selectionchange", onSelectionChange);
 			document.removeEventListener("input", onInput);
 			document.removeEventListener("mousedown", onMouseDown);
 			document.removeEventListener("mouseup", onMouseUp);
+			document.removeEventListener("compositionstart", onCompositionStart);
+			document.removeEventListener("compositionend", onCompositionEnd);
 		};
 	}, [uiPrefs.typewriterMode]);
 
@@ -1196,13 +1359,24 @@ export default function Editor({
 	}
 
 	async function handlePublish(nextStatus: "draft") {
-		if (!post || !confirmPublish(nextStatus)) {
+		if (!post || !confirmPublish(nextStatus) || publishingRef.current) {
 			return;
 		}
+		publishingRef.current = true;
 		setPublishing(true);
 		setError(null);
 		try {
 			await saverRef.current?.flush();
+			const saver = saverRef.current;
+			if (
+				saver &&
+				(saver.hasPending || saver.conflict || Boolean(saver.lastError))
+			) {
+				setError(
+					"Could not save your latest edits, so publishing was cancelled. Your changes are still here.",
+				);
+				return;
+			}
 			// Rule 4.2 lives inside setPostStatus: status only, never newsletter.
 			const result = await setPostStatus(
 				site,
@@ -1223,18 +1397,31 @@ export default function Editor({
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		} finally {
+			publishingRef.current = false;
 			setPublishing(false);
 		}
 	}
 
 	async function handlePublishAction(action: PublishAction) {
-		if (!post) {
+		if (!post || publishingRef.current) {
 			return;
 		}
+		publishingRef.current = true;
 		setPublishing(true);
 		setError(null);
 		try {
 			await saverRef.current?.flush();
+			const saver = saverRef.current;
+			if (
+				saver &&
+				(saver.hasPending || saver.conflict || Boolean(saver.lastError))
+			) {
+				setError(
+					"Could not save your latest edits, so publishing was cancelled. Your changes are still here.",
+				);
+				setPublishModalOpen(false);
+				return;
+			}
 			const currentUpdatedAt =
 				saverRef.current?.updatedAt ?? post.updated_at;
 			let result: {status: string; updated_at: string};
@@ -1292,12 +1479,13 @@ export default function Editor({
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		} finally {
+			publishingRef.current = false;
 			setPublishing(false);
 		}
 	}
 
 	async function handleUnschedule() {
-		if (!post) {
+		if (!post || publishingRef.current) {
 			return;
 		}
 		const ok = window.confirm(
@@ -1306,10 +1494,21 @@ export default function Editor({
 		if (!ok) {
 			return;
 		}
+		publishingRef.current = true;
 		setPublishing(true);
 		setError(null);
 		try {
 			await saverRef.current?.flush();
+			const saver = saverRef.current;
+			if (
+				saver &&
+				(saver.hasPending || saver.conflict || Boolean(saver.lastError))
+			) {
+				setError(
+					"Could not save your latest edits, so publishing was cancelled. Your changes are still here.",
+				);
+				return;
+			}
 			const result = await unschedulePost(
 				site,
 				post.id,
@@ -1330,6 +1529,7 @@ export default function Editor({
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		} finally {
+			publishingRef.current = false;
 			setPublishing(false);
 		}
 	}
@@ -1340,8 +1540,14 @@ export default function Editor({
 		}
 		const patch = buildRestorePatch(revision);
 		setTitle(patch.title);
+		if (patch.title !== undefined) {
+			onTitleChange?.(patch.title);
+		}
 		setLexical(patch.lexical);
-		setPost(prev => (prev ? {...prev, lexical: patch.lexical} : prev));
+		setPost(prev => (prev ? {...prev, ...patch} : prev));
+		if (postRef.current) {
+			postRef.current = {...postRef.current, ...patch};
+		}
 		setMeta(prev => ({
 			...prev,
 			customExcerpt: patch.custom_excerpt ?? "",
@@ -1430,6 +1636,7 @@ export default function Editor({
 			}
 
 			const localScrap = await demoteDraftToScrap(site, fresh);
+			await removeCachedDraft(site.base, post.id).catch(() => {});
 			saverRef.current?.halt();
 			onOpenScrap?.(localScrap);
 		} catch (err) {
@@ -1480,9 +1687,9 @@ export default function Editor({
 				<div className="error-banner" role="alert">
 					<span>{error}</span>
 					<div className="banner-actions">
-						<button onClick={onBack}>← Back to posts</button>
+						<button type="button" onClick={onBack}>← Back to posts</button>
 						{needsReconnect && onReconnect && (
-							<button onClick={onReconnect}>Reconnect site</button>
+							<button type="button" onClick={onReconnect}>Reconnect site</button>
 						)}
 					</div>
 				</div>
@@ -1828,6 +2035,7 @@ export default function Editor({
 						}}
 						readOnly={isReadOnly}
 						rows={1}
+						aria-label={isScrapMode ? "Scrap title" : "Post title"}
 						placeholder={isScrapMode ? "Scrap title" : "Post title"}
 						data-testid="title-input"
 					/>
@@ -1846,6 +2054,7 @@ export default function Editor({
 							readOnly={isReadOnly}
 							rows={1}
 							maxLength={MAX_EXCERPT_LENGTH}
+							aria-label="Post excerpt"
 							placeholder="Add an excerpt"
 							spellCheck
 							data-testid="excerpt-input-inline"
@@ -1905,6 +2114,7 @@ export default function Editor({
 							? "Saved automatically on this Mac"
 							: "Cmd+S saves a revision"
 					}
+					aria-label={`Word count: ${wordCount}`}
 					data-testid="word-count"
 				>
 					{wordCount.toLocaleString()} {wordCount === 1 ? "word" : "words"}

@@ -108,8 +108,13 @@ release can serve mismatched artifacts and `latest.json` signatures.
 
 ## Cutting a release
 
-1. Bump `version` in `package.json`, `src-tauri/tauri.conf.json` and
-   `src-tauri/Cargo.toml` to the same value.
+1. Bump `version` across all five files to the same value:
+   - `package.json`
+   - `package-lock.json`
+   - `src-tauri/tauri.conf.json`
+   - `src-tauri/Cargo.toml`
+   - `src-tauri/Cargo.lock`
+   `npm test` (and `npm run check`) now guards version consistency across all five files.
 2. Commit, then tag and push:
 
    ```bash

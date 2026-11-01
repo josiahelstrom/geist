@@ -29,7 +29,9 @@ fn creds() -> Option<(String, String)> {
 
 #[tokio::test]
 async fn stored_key_produces_a_token_the_server_accepts() {
-    let Some((base, secret)) = creds() else { return; };
+    let Some((base, secret)) = creds() else {
+        return;
+    };
 
     // Write through the same keychain path the app uses.
     let entry = Entry::new(SERVICE, &base).expect("open keychain entry");
@@ -73,7 +75,9 @@ async fn stored_key_produces_a_token_the_server_accepts() {
 
 #[tokio::test]
 async fn tampered_token_is_rejected_by_the_server() {
-    let Some((base, secret)) = creds() else { return; };
+    let Some((base, secret)) = creds() else {
+        return;
+    };
     let jwt = mint(&secret, 0).expect("mint token");
     let mut bad = jwt.clone();
     let last = bad.pop().unwrap();
@@ -94,7 +98,9 @@ async fn tampered_token_is_rejected_by_the_server() {
 
 #[tokio::test]
 async fn wrong_secret_is_rejected() {
-    let Some((base, _secret)) = creds() else { return; };
+    let Some((base, _secret)) = creds() else {
+        return;
+    };
     let forged = mint(&format!("deadbeef:{}", "00".repeat(32)), 0).expect("mint");
 
     let client = reqwest::Client::new();
@@ -114,7 +120,9 @@ async fn wrong_secret_is_rejected() {
 async fn clock_offset_produces_a_valid_token() {
     // A server whose clock runs ahead is the §13 risk. Simulate a +60s offset
     // and confirm the server still accepts the token.
-    let Some((base, secret)) = creds() else { return; };
+    let Some((base, secret)) = creds() else {
+        return;
+    };
     let jwt = mint(&secret, 60).expect("mint with offset");
 
     let client = reqwest::Client::new();
@@ -134,7 +142,9 @@ async fn clock_offset_produces_a_valid_token() {
 async fn redirects_are_not_followed_so_auth_is_never_dropped() {
     // Rule 4.5: an authenticated call must surface a redirect as an error
     // rather than silently replaying the request without the header.
-    let Some((base, _secret)) = creds() else { return; };
+    let Some((base, _secret)) = creds() else {
+        return;
+    };
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()

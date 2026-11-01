@@ -37,7 +37,8 @@ fn read_stored_key(base: &str) -> Result<String, String> {
             let legacy = legacy_entry(base)?
                 .get_password()
                 .map_err(|_| "No key saved for this site. Reconnect.".to_string())?;
-            let _ = entry(base).and_then(|e| e.set_password(&legacy).map_err(|err| err.to_string()));
+            let _ =
+                entry(base).and_then(|e| e.set_password(&legacy).map_err(|err| err.to_string()));
             Ok(legacy)
         }
         Err(e) => Err(e.to_string()),
@@ -332,9 +333,9 @@ fn parse_staff_key(body: &str) -> Result<(String, String), String> {
 /// Persists the Staff Access Token in the Keychain under `app.geist` / `base`,
 /// the same account `save_key` writes and `read_stored_key`/`get_jwt` read.
 fn store_staff_key(base: &str, key: &str) -> Result<(), String> {
-    entry(base)?.set_password(key).map_err(|error| {
-        format!("Could not save the Staff Access Token to the Keychain: {error}")
-    })
+    entry(base)?
+        .set_password(key)
+        .map_err(|error| format!("Could not save the Staff Access Token to the Keychain: {error}"))
 }
 
 async fn fetch_staff_token(
@@ -727,7 +728,7 @@ pub fn mint(key: &str, offset: i64) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .menu(|app| build_menu(app))
+        .menu(build_menu)
         .on_menu_event(|app, event| {
             let _ = app.emit("geist:menu", event.id().0.as_str());
         })
@@ -815,7 +816,9 @@ mod tests {
 
     #[test]
     fn preview_url_allows_https_and_loopback_http() {
-        assert!(validate_preview_url("https://everywayhuman.com/p/1234/?member_status=free").is_ok());
+        assert!(
+            validate_preview_url("https://everywayhuman.com/p/1234/?member_status=free").is_ok()
+        );
         assert!(validate_preview_url("http://localhost:2368/p/1234/").is_ok());
         assert!(validate_preview_url("http://127.0.0.1:2368/p/1234/?member_status=paid").is_ok());
     }

@@ -1,9 +1,11 @@
 # Geist — Architecture
 
-The living reference for how Geist is built and where it is going. This document covers
-**current and future active context only**. The full historical design record — weekend
-build plan, verified Ghost behaviours, corrections found while building — is preserved at
-[`docs/ghost-desktop-editor.md.bak`](./ghost-desktop-editor.md.bak).
+The living technical reference for how Geist is built and operates at 1.0.x. Geist is a native
+macOS desktop editor (with Windows support via WebView2) for Ghost publications, providing
+offline draft caching, private local scratchpads, Koenig editor parity, secure Keychain-backed
+authentication, and in-app auto-updates. The full historical design record — weekend build plan,
+verified Ghost behaviours, corrections found while building — is preserved at
+[`docs/ghost-desktop-editor.md`](./ghost-desktop-editor.md).
 
 ---
 
@@ -151,7 +153,27 @@ as the `TAURI_SIGNING_PRIVATE_KEY` secret and in the maintainer's password manag
 
 ---
 
-## Official Version Roadmap
+## Roadmap (Internal Planning)
+
+*Note: This roadmap is internal planning context maintained for contributors and does not represent a delivery commitment.*
+
+### Now
+- **Public 1.1.0 release polish** — Complete documentation, release validation, and packaging verification for the broad public release.
+
+### Next
+- **Windows CI** — The Windows target is in the release matrix but never built or tested in CI.
+- **CSS consolidation** — Migrate the legacy 861-line `src/App.css` into `src/styles/` and remove the doubled `.class.class` selectors.
+- **Header bar consolidation** — Consolidate the two stacked 52px header bars into floating canvas pills.
+- **Canvas layout stability** — Stop the canvas shifting ~160px when the inspector opens at 1440px.
+- **Expand component test coverage** — Expand component test coverage beyond `PublishModal`.
+
+### Later
+- **Markdown-adjacent footnote syntax (`[^1]`)** — Syntax that serializes to Ghost's `<sup class="footnote-ref">` + `<section class="footnotes">` HTML without surfacing an HTML card in the editor (needs a custom Lexical node + serializer).
+- **Dependency maintenance (track, do not schedule).** React 19 only when `@tryghost/koenig-lexical` compatibility is verified — Koenig is the largest surface and declares no React peer dependency. TypeScript 7 (the native `tsgo` compiler) once the Vite/plugin toolchain supports it; dev-only, no runtime risk, main benefit is faster typechecking.
+
+---
+
+## Version History
 
 | Version | Status | Scope |
 |---|---|---|
@@ -161,7 +183,8 @@ as the `TAURI_SIGNING_PRIVATE_KEY` secret and in the maintainer's password manag
 | `v0.7.0 Scraps` | **Shipped** | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
 | `v0.8.0 Feature Complete` | **Shipped** | Offline draft cache (`draft_cache.json`), `offline` save status, offline editing from cached copies, automatic replay of dirty patches on reconnect |
 | `v0.8.1 Maintenance` | **Shipped** | Code review hardening: conflict overwrite preservation, scrap mode close guard, titlebar status mirror, promote idempotency, forget site cache purge |
-| `v1.0.0 General Availability` | **Shipped / Current** | First official public release with DMG & signed updater artifacts, Windows/WebView2 build, `tauri-plugin-updater` with GitHub Releases |
+| `v1.0.0 General Availability` | **Shipped** | First official public release with DMG & signed updater artifacts, Windows/WebView2 build, `tauri-plugin-updater` with GitHub Releases |
+| `v1.1.0` | **Shipped / Current** | Editor refinements, bundled typography, WCAG AA contrast and focus management, offline/save reliability, security boundaries, CI checks and component tests |
 
 ### Milestone detail
 
@@ -207,7 +230,7 @@ flushes on window close requests; titlebar save status mirrors local scraps; pro
 reuses existing drafts across retries to prevent duplicate Ghost posts; forgetting a site
 purges its cached drafts and scraps from disk; and opener actions catch unhandled rejections.
 
-**v1.0.0 GA (current).** First official public release. macOS bundles are ad-hoc signed
+**v1.0.0 GA (shipped).** First official public release. macOS bundles are ad-hoc signed
 (`bundle.macOS.signingIdentity: "-"`) but not notarized yet, so first launch shows the
 Gatekeeper "unverified developer" prompt (right-click → Open, or the
 `xattr -dr com.apple.quarantine` workaround). Bundles ship as a DMG plus a signed updater
@@ -215,3 +238,25 @@ archive; Windows builds use WebView2. `tauri-plugin-updater` reads `latest.json`
 GitHub Releases and `tauri-plugin-process` restarts the app after an in-place install.
 Releases are built by `.github/workflows/release.yml` on a `v*` tag and stay drafts
 until verified. See [`releasing.md`](./releasing.md).
+
+**v1.1.0 (current).** Removed the editor "Begin writing…" placeholder, wrapped
+post titles across multiple lines in an auto-growing field, and widened the native
+reading measure from 740px to 780px. Bundled Inter, Lora, and JetBrains Mono
+(variable, upright + italic, OFL), added a body-font preference, and enabled typewriter
+scrolling to keep the active line centered. Moved focus mode to `Cmd+Shift+F`,
+made `Cmd+\` a dedicated navigation-rail toggle, and styled the titlebar and editor
+header to share the canvas background in focus mode. Raised text contrast to WCAG
+AA in both themes (fixing publish action and body links from 2.08:1), added visible
+`:focus-visible` rings, added Escape dismiss, focus restore, and focus traps for the
+inspector, revisions drawer, and token-rotation dialog, and added a scrim for the
+overlay rail below 1120px. Fixed window-close "Cancel" destroying the window and
+discarding unsaved work, remounted the editor on post switches, blocked publish if
+the latest edits failed to save, opened dirty offline drafts with local edits visible,
+capped the draft cache at 50 per site with dirty drafts never evicted, and prevented
+secondary metadata loaders from raising unhandled rejections. Added a
+Content-Security-Policy that blocks remote script execution, narrowed the opener
+capability to `allow-open-url`, normalized Keychain account keys, bounded admin JWT
+timestamp arithmetic, and added request timeouts. Configured CI to run `cargo clippy
+-D warnings` and `cargo fmt --check`, set the release workflow to fail fast if the
+git tag does not match the manifest versions, and added jsdom + React Testing
+Library with the first component tests (`PublishModal`, close-guard).

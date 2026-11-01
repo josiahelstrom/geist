@@ -5,6 +5,8 @@ const storeMock = vi.hoisted(() => ({
 	data: new Map<string, unknown>(),
 	deleted: [] as string[],
 	failGet: false,
+	saveCalls: 0,
+	setCalls: 0,
 }));
 
 vi.mock("@tauri-apps/plugin-store", () => ({
@@ -17,6 +19,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({
 		}
 
 		async set(key: string, value: unknown) {
+			storeMock.setCalls++;
 			storeMock.data.set(key, value);
 		}
 
@@ -26,7 +29,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({
 		}
 
 		async save() {
-			/* no-op */
+			storeMock.saveCalls++;
 		}
 	},
 }));
@@ -40,6 +43,7 @@ import {
 	listCachedDrafts,
 	listPendingPatches,
 	markDraftClean,
+	MAX_CACHED_DRAFTS_PER_SITE,
 	removeCachedDraft,
 } from "./draftCache";
 
@@ -74,6 +78,8 @@ beforeEach(() => {
 	storeMock.data.clear();
 	storeMock.deleted.length = 0;
 	storeMock.failGet = false;
+	storeMock.saveCalls = 0;
+	storeMock.setCalls = 0;
 });
 
 afterEach(() => {
@@ -148,6 +154,42 @@ describe("cacheDraft / getCachedDraft", () => {
 
 	it("returns null for an uncached post", async () => {
 		await expect(getCachedDraft(SITE, "missing")).resolves.toBeNull();
+	});
+
+	it("does not write to disk or bump lastOpenedAt when touch is false", async () => {
+		vi.stubGlobal("window", {__TAURI_INTERNALS__: {}});
+		const post = makePost();
+		setTime("2026-02-01T10:00:00.000Z");
+		await cacheDraft(SITE, post);
+
+		const initialSaveCalls = storeMock.saveCalls;
+		const initialSetCalls = storeMock.setCalls;
+
+		setTime("2026-02-01T11:00:00.000Z");
+		const cached = await getCachedDraft(SITE, post.id, {touch: false});
+
+		expect(cached).not.toBeNull();
+		expect(cached?.lastOpenedAt).toBe("2026-02-01T10:00:00.000Z");
+		expect(storeMock.saveCalls).toBe(initialSaveCalls);
+		expect(storeMock.setCalls).toBe(initialSetCalls);
+	});
+
+	it("writes to disk and bumps lastOpenedAt when touch is true", async () => {
+		vi.stubGlobal("window", {__TAURI_INTERNALS__: {}});
+		const post = makePost();
+		setTime("2026-02-01T10:00:00.000Z");
+		await cacheDraft(SITE, post);
+
+		const initialSaveCalls = storeMock.saveCalls;
+		const initialSetCalls = storeMock.setCalls;
+
+		setTime("2026-02-01T11:00:00.000Z");
+		const cached = await getCachedDraft(SITE, post.id, {touch: true});
+
+		expect(cached).not.toBeNull();
+		expect(cached?.lastOpenedAt).toBe("2026-02-01T11:00:00.000Z");
+		expect(storeMock.saveCalls).toBe(initialSaveCalls + 1);
+		expect(storeMock.setCalls).toBe(initialSetCalls + 1);
 	});
 });
 
@@ -381,5 +423,121 @@ describe("Tauri store adapter", () => {
 		expect(storeMock.deleted).toContain(storeKey(SITE));
 		expect(storeMock.data.has(storeKey(SITE))).toBe(false);
 		await expect(listCachedDrafts(SITE)).resolves.toEqual([]);
+	});
+});
+
+describe("draft cache LRU cap", () => {
+	it("enforces a cap of 50 drafts per site", async () => {
+		for (let i = 1; i <= 55; i++) {
+			setTime(`2026-02-01T10:${i.toString().padStart(2, "0")}:00.000Z`);
+			await cacheDraft(SITE, makePost({id: `post-${i}`, title: `Post ${i}`}));
+		}
+
+		const drafts = await listCachedDrafts(SITE);
+		expect(drafts).toHaveLength(MAX_CACHED_DRAFTS_PER_SITE);
+		expect(drafts).toHaveLength(50);
+
+		const ids = drafts.map(d => d.postId);
+		for (let i = 1; i <= 5; i++) {
+			expect(ids).not.toContain(`post-${i}`);
+		}
+		for (let i = 6; i <= 55; i++) {
+			expect(ids).toContain(`post-${i}`);
+		}
+	});
+
+	it("evicts oldest clean drafts before dirty drafts", async () => {
+		for (let i = 1; i <= 10; i++) {
+			setTime(`2026-02-01T10:${i.toString().padStart(2, "0")}:00.000Z`);
+			await cacheDraft(SITE, makePost({id: `dirty-${i}`}), {
+				dirty: true,
+				pendingPatch: {title: `Dirty ${i}`},
+			});
+		}
+
+		for (let i = 1; i <= 40; i++) {
+			setTime(`2026-02-01T11:${i.toString().padStart(2, "0")}:00.000Z`);
+			await cacheDraft(SITE, makePost({id: `clean-${i}`}));
+		}
+
+		for (let i = 41; i <= 45; i++) {
+			setTime(`2026-02-01T12:${i.toString().padStart(2, "0")}:00.000Z`);
+			await cacheDraft(SITE, makePost({id: `clean-${i}`}));
+		}
+
+		const drafts = await listCachedDrafts(SITE);
+		expect(drafts).toHaveLength(50);
+
+		const ids = drafts.map(d => d.postId);
+		for (let i = 1; i <= 10; i++) {
+			expect(ids).toContain(`dirty-${i}`);
+		}
+		for (let i = 1; i <= 5; i++) {
+			expect(ids).not.toContain(`clean-${i}`);
+		}
+		for (let i = 6; i <= 45; i++) {
+			expect(ids).toContain(`clean-${i}`);
+		}
+	});
+
+	it("never evicts dirty drafts even if cap is exceeded entirely by dirty drafts", async () => {
+		for (let i = 1; i <= 55; i++) {
+			setTime(`2026-02-01T10:${i.toString().padStart(2, "0")}:00.000Z`);
+			await cacheDraft(SITE, makePost({id: `dirty-${i}`}), {
+				dirty: true,
+				pendingPatch: {title: `Dirty ${i}`},
+			});
+		}
+
+		const drafts = await listCachedDrafts(SITE);
+		expect(drafts).toHaveLength(55);
+		const ids = drafts.map(d => d.postId);
+		for (let i = 1; i <= 55; i++) {
+			expect(ids).toContain(`dirty-${i}`);
+		}
+	});
+
+	it("maintains correct LRU ordering when drafts are read", async () => {
+		for (let i = 1; i <= 50; i++) {
+			setTime(`2026-02-01T10:${i.toString().padStart(2, "0")}:00.000Z`);
+			await cacheDraft(SITE, makePost({id: `post-${i}`}));
+		}
+
+		setTime("2026-02-01T11:00:00.000Z");
+		const accessed = await getCachedDraft(SITE, "post-1");
+		expect(accessed?.lastOpenedAt).toBe("2026-02-01T11:00:00.000Z");
+
+		setTime("2026-02-01T11:05:00.000Z");
+		await cacheDraft(SITE, makePost({id: "post-51"}));
+
+		const drafts = await listCachedDrafts(SITE);
+		expect(drafts).toHaveLength(50);
+
+		const ids = drafts.map(d => d.postId);
+		expect(ids).toContain("post-1");
+		expect(ids).not.toContain("post-2");
+		expect(ids).toContain("post-51");
+	});
+
+	it("does not bump LRU ordering when read with touch: false", async () => {
+		for (let i = 1; i <= 50; i++) {
+			setTime(`2026-02-01T10:${i.toString().padStart(2, "0")}:00.000Z`);
+			await cacheDraft(SITE, makePost({id: `post-${i}`}));
+		}
+
+		setTime("2026-02-01T11:00:00.000Z");
+		const accessed = await getCachedDraft(SITE, "post-1", {touch: false});
+		expect(accessed?.lastOpenedAt).toBe("2026-02-01T10:01:00.000Z");
+
+		setTime("2026-02-01T11:05:00.000Z");
+		await cacheDraft(SITE, makePost({id: "post-51"}));
+
+		const drafts = await listCachedDrafts(SITE);
+		expect(drafts).toHaveLength(50);
+
+		const ids = drafts.map(d => d.postId);
+		expect(ids).not.toContain("post-1");
+		expect(ids).toContain("post-2");
+		expect(ids).toContain("post-51");
 	});
 });

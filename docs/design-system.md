@@ -1,4 +1,4 @@
-# Geist Design System — v0.5.0 "Native"
+# Geist Design System — v1.1.0
 
 > **Phase 0 specification.** This document is the source of truth for the v0.5.0 Native
 > redesign. It fixes the tokens, metrics, materials, typography, and component contracts
@@ -835,12 +835,17 @@ Measured against the canvas (WCAG 2.1 relative luminance):
 | --- | --- | --- |
 | `--fg-primary` on `--bg-canvas` (light) | `17.96:1` | All text |
 | `--fg-primary` on `--bg-canvas` (dark) | `16.23:1` | All text |
-| `--fg-secondary` on light canvas | `3.49:1` | 12px+ metadata and UI labels only; not body copy |
+| `--fg-secondary` on light canvas | `4.55:1` | Secondary text, readable previews, hints, and UI metadata (darkened to `#687887` for WCAG AA) |
 | `--fg-secondary` on dark canvas | `7.18:1` | All text |
 | `--fg-muted` on light canvas | `2.03:1` | Word count, placeholders, disabled states only |
 | `--fg-muted` on dark canvas | `3.57:1` | Word count, placeholders, disabled states only |
+| `--ink-link` on light canvas | `5.45:1` | Body links in editor (`#157a2b`, with underline) |
+| `--ink-link` on dark canvas | `10.46:1` | Body links in editor (`#58da67`, with underline) |
+| `--border-strong` on light canvas | `3.49:1` | Keyboard focus indicators (`#7c8b9a`, WCAG 1.4.11 non-text >= 3:1) |
+| `--border-strong` on dark canvas | `3.57:1` | Keyboard focus indicators (`#696c6f`, WCAG 1.4.11 non-text >= 3:1) |
 | `--status-draft` on light canvas | `3.58:1` | Status label at 11px/600; never body copy |
 | `--status-draft` on dark canvas | `5.27:1` | Status label |
+| Publish action (light) | `17.96:1` | Filled pill button (`--accent-primary-fg` on `--accent-primary-bg`) |
 | `--status-publish` (dark) on dark canvas | `10.46:1` | Publish action |
 | `--accent-primary-fg` on `--accent-primary-bg` | `17.96:1` (light) / `15.45:1` (dark) | Primary buttons |
 

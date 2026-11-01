@@ -714,6 +714,7 @@ export default function App() {
 					/>
 				) : route.name === "editor" ? (
 					<Editor
+						key={`${site.base}:${route.postId}`}
 						site={site}
 						postId={route.postId}
 						onBack={handleBackToList}

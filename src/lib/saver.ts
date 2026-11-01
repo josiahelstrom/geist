@@ -227,9 +227,8 @@ export function createSaver(
 			// suffices. Loop in case a keystroke queued a patch while we
 			// waited, but bail out on failure so a dead server cannot spin.
 			for (let i = 0; i < 10 && !stopped; i++) {
-				const errorBefore = lastError;
 				await start();
-				if (lastError !== errorBefore) {
+				if (lastError !== null) {
 					return; // failed; `pending` is kept for a later retry
 				}
 				if (!pending && !running) {

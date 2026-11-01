@@ -46,6 +46,7 @@ export type NavigationRailProps = {
 	sections?: NavigationSection[];
 	/** Controlled collapse state (`Cmd+\` or the titlebar toggle). */
 	sidebarOpen: boolean;
+	onClose?: () => void;
 	activeFilter?: PostStatusFilter;
 	/** Which top-level list is on screen (Posts or Scraps). */
 	activeView?: "posts" | "scraps";
@@ -179,6 +180,7 @@ export default function NavigationRail({
 	sites,
 	sections = DEFAULT_SECTIONS,
 	sidebarOpen,
+	onClose,
 	activeFilter,
 	activeView = "posts",
 	scrapCount,
@@ -198,6 +200,28 @@ export default function NavigationRail({
 	>({});
 	const searchRef = useRef<HTMLInputElement>(null);
 
+	function closeRail() {
+		if (onClose) {
+			onClose();
+			return;
+		}
+		const toggle = document.querySelector<HTMLButtonElement>(
+			'[data-testid="titlebar-sidebar-toggle"]',
+		);
+		if (toggle) {
+			toggle.click();
+		} else {
+			window.dispatchEvent(
+				new KeyboardEvent("keydown", {
+					key: "\\",
+					code: "Backslash",
+					metaKey: true,
+					bubbles: true,
+				}),
+			);
+		}
+	}
+
 	// Quick Search owns ⌘K while the rail is visible.
 	useEffect(() => {
 		if (!sidebarOpen) {
@@ -212,6 +236,29 @@ export default function NavigationRail({
 				event.preventDefault();
 				searchRef.current?.focus();
 				searchRef.current?.select();
+			}
+		}
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [sidebarOpen]);
+
+	// Escape closes the rail when it is open in overlay mode (<1120px).
+	useEffect(() => {
+		if (!sidebarOpen) {
+			return;
+		}
+		function onKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape" && !event.defaultPrevented) {
+				const isNarrow =
+					typeof window !== "undefined" &&
+					(typeof window.matchMedia === "function"
+						? window.matchMedia("(max-width: 1119px)").matches
+						: typeof window.innerWidth === "number" &&
+							window.innerWidth < 1120);
+				if (isNarrow) {
+					event.preventDefault();
+					closeRail();
+				}
 			}
 		}
 		window.addEventListener("keydown", onKeyDown);
@@ -252,163 +299,175 @@ export default function NavigationRail({
 	}
 
 	return (
-		<aside
-			className="navigation-rail"
-			aria-label="Navigation"
-			aria-hidden={!sidebarOpen}
-			data-open={sidebarOpen ? "true" : "false"}
-			data-testid="navigation-rail"
-		>
-			<div className="rail-site">
-				<span className="rail-site-avatar" aria-hidden="true">
-					{siteInitials(publicationName)}
-				</span>
-				<div className="rail-site-copy">
-					{multipleSites ? (
-						<select
-							className="rail-site-select"
-							value={site.base}
-							onChange={event => {
-								const next = sites?.find(s => s.base === event.target.value);
-								if (next) {
-									onSelectSite?.(next);
-								}
-							}}
-							aria-label="Site"
-						>
-							{sites?.map(s => (
-								<option key={s.base} value={s.base}>
-									{s.title || hostFromBase(s.base)}
-								</option>
-							))}
-						</select>
-					) : (
-						<span className="rail-site-name" title={publicationName}>
-							{publicationName}
-						</span>
-					)}
-					<span className="rail-site-staff">
-						{staffLabel}
-						{staffMeta ? ` · ${staffMeta}` : ""}
-					</span>
-				</div>
-			</div>
-
-			<div className="rail-search">
-				<span className="rail-search-icon" aria-hidden="true">
-					<SearchIcon />
-				</span>
-				<input
-					ref={searchRef}
-					type="search"
-					className="rail-search-input"
-					value={query}
-					onChange={event => onQueryChange?.(event.target.value)}
-					placeholder="Quick search"
-					aria-label="Quick search posts"
-					data-testid="rail-search-input"
+		<>
+			{sidebarOpen && (
+				<div
+					className="rail-scrim"
+					onClick={closeRail}
+					aria-hidden="true"
+					data-testid="rail-scrim"
 				/>
-				<kbd className="rail-search-hint" aria-hidden="true">
-					⌘K
-				</kbd>
-			</div>
-
-			<div className="rail-divider" role="presentation" />
-
-			<nav className="rail-sections" aria-label="Site sections">
-				{sections.map(section => {
-					const hasItems = Boolean(section.items?.length);
-					const expandable = section.expandable ?? hasItems;
-					const expanded = !collapsedSections[section.id];
-					return (
-						<div className="rail-section" key={section.id}>
-							<button
-								type="button"
-								className="rail-nav-row rail-section-toggle"
-								onClick={() =>
-									expandable ? toggleSection(section) : undefined
-								}
-								aria-expanded={expandable ? expanded : undefined}
-							>
-								<span className="rail-nav-icon">
-									{section.icon ?? <FolderIcon />}
-								</span>
-								<span className="rail-nav-label">{section.label}</span>
-								{expandable && <ChevronIcon open={expanded} />}
-							</button>
-
-							{hasItems && expanded && (
-								<div className="rail-section-items">
-									{section.items?.map(item => {
-										const active =
-											(item.filter !== undefined &&
-												item.filter === activeFilter &&
-												activeView === "posts") ||
-											(item.view !== undefined &&
-												item.view === activeView);
-										const count = itemCount(item);
-										return (
-											<button
-												type="button"
-												key={item.id}
-												className={
-													active
-														? "rail-nav-row rail-child-row is-active"
-														: "rail-nav-row rail-child-row"
-												}
-												onClick={() => selectItem(section, item)}
-												aria-current={active ? "page" : undefined}
-												data-testid={
-													item.view === "scraps"
-														? "rail-scraps-item"
-														: undefined
-												}
-											>
-												{item.tone && (
-													<span
-														className={`rail-dot rail-dot-${item.tone}`}
-														aria-hidden="true"
-													/>
-												)}
-												<span className="rail-nav-label">
-													{item.label}
-													{typeof count === "number" && count > 0
-														? ` (${count})`
-														: ""}
-												</span>
-											</button>
-										);
-									})}
-								</div>
-							)}
-						</div>
-					);
-				})}
-			</nav>
-
-			<div className="rail-footer">
-				<button
-					type="button"
-					className="rail-nav-row rail-settings"
-					onClick={onOpenSettings}
-					title="Manage connected sites"
-				>
-					<span className="rail-nav-icon">
-						<SettingsIcon />
+			)}
+			<aside
+				className="navigation-rail"
+				aria-label="Navigation"
+				aria-hidden={!sidebarOpen}
+				data-open={sidebarOpen ? "true" : "false"}
+				data-testid="navigation-rail"
+			>
+				<div className="rail-site">
+					<span className="rail-site-avatar" aria-hidden="true">
+						{siteInitials(publicationName)}
 					</span>
-					<span className="rail-nav-label">Site settings</span>
-				</button>
+					<div className="rail-site-copy">
+						{multipleSites ? (
+							<select
+								className="rail-site-select"
+								value={site.base}
+								onChange={event => {
+									const next = sites?.find(s => s.base === event.target.value);
+									if (next) {
+										onSelectSite?.(next);
+									}
+								}}
+								aria-label="Site"
+							>
+								{sites?.map(s => (
+									<option key={s.base} value={s.base}>
+										{s.title || hostFromBase(s.base)}
+									</option>
+								))}
+							</select>
+						) : (
+							<span className="rail-site-name" title={publicationName}>
+								{publicationName}
+							</span>
+						)}
+						<span className="rail-site-staff">
+							{staffLabel}
+							{staffMeta ? ` · ${staffMeta}` : ""}
+						</span>
+					</div>
+				</div>
 
-				<button
-					type="button"
-					className="rail-new-post"
-					onClick={onNewPost}
-					data-testid="rail-new-post"
-				>
-					<PlusIcon />
-					New post
-				</button>
-			</div>
-		</aside>
+				<div className="rail-search">
+					<span className="rail-search-icon" aria-hidden="true">
+						<SearchIcon />
+					</span>
+					<input
+						ref={searchRef}
+						type="search"
+						className="rail-search-input"
+						value={query}
+						onChange={event => onQueryChange?.(event.target.value)}
+						placeholder="Quick search"
+						aria-label="Quick search posts"
+						data-testid="rail-search-input"
+					/>
+					<kbd className="rail-search-hint" aria-hidden="true">
+						⌘K
+					</kbd>
+				</div>
+
+				<div className="rail-divider" role="presentation" />
+
+				<nav className="rail-sections" aria-label="Site sections">
+					{sections.map(section => {
+						const hasItems = Boolean(section.items?.length);
+						const expandable = section.expandable ?? hasItems;
+						const expanded = !collapsedSections[section.id];
+						const itemsId = `rail-section-items-${section.id}`;
+						return (
+							<div className="rail-section" key={section.id}>
+								<button
+									type="button"
+									className="rail-nav-row rail-section-toggle"
+									onClick={() =>
+										expandable ? toggleSection(section) : undefined
+									}
+									aria-expanded={expandable ? expanded : undefined}
+									aria-controls={expandable && hasItems ? itemsId : undefined}
+								>
+									<span className="rail-nav-icon">
+										{section.icon ?? <FolderIcon />}
+									</span>
+									<span className="rail-nav-label">{section.label}</span>
+									{expandable && <ChevronIcon open={expanded} />}
+								</button>
+
+								{hasItems && expanded && (
+									<div id={itemsId} className="rail-section-items">
+										{section.items?.map(item => {
+											const active =
+												(item.filter !== undefined &&
+													item.filter === activeFilter &&
+													activeView === "posts") ||
+												(item.view !== undefined &&
+													item.view === activeView);
+											const count = itemCount(item);
+											return (
+												<button
+													type="button"
+													key={item.id}
+													className={
+														active
+															? "rail-nav-row rail-child-row is-active"
+															: "rail-nav-row rail-child-row"
+													}
+													onClick={() => selectItem(section, item)}
+													aria-current={active ? "page" : undefined}
+													data-testid={
+														item.view === "scraps"
+															? "rail-scraps-item"
+															: undefined
+													}
+												>
+													{item.tone && (
+														<span
+															className={`rail-dot rail-dot-${item.tone}`}
+															aria-hidden="true"
+														/>
+													)}
+													<span className="rail-nav-label">
+														{item.label}
+														{typeof count === "number" && count > 0
+															? ` (${count})`
+															: ""}
+													</span>
+												</button>
+											);
+										})}
+									</div>
+								)}
+							</div>
+						);
+					})}
+				</nav>
+
+				<div className="rail-footer">
+					<button
+						type="button"
+						className="rail-nav-row rail-settings"
+						onClick={onOpenSettings}
+						title="Manage connected sites"
+					>
+						<span className="rail-nav-icon">
+							<SettingsIcon />
+						</span>
+						<span className="rail-nav-label">Site settings</span>
+					</button>
+
+					<button
+						type="button"
+						className="rail-new-post"
+						onClick={onNewPost}
+						data-testid="rail-new-post"
+					>
+						<PlusIcon />
+						New post
+					</button>
+				</div>
+			</aside>
+		</>
 	);
 }

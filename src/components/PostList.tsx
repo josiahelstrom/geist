@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
 	GhostError,
 	listPosts,
@@ -221,13 +221,30 @@ export default function PostList({
 		};
 	}, [site, tab, refreshTick]);
 
+	// Reset filters and selection when switching publications so stale tag slugs
+	// or search terms from one site do not make another site's list appear empty.
+	const prevSiteBaseRef = useRef(site.base);
+	useEffect(() => {
+		if (prevSiteBaseRef.current !== site.base) {
+			prevSiteBaseRef.current = site.base;
+			setTagFilter("");
+			setSelectedId(null);
+			setLocalQuery("");
+			onSearchQueryChange?.("");
+		}
+	}, [site.base, onSearchQueryChange]);
+
 	useEffect(() => {
 		let cancelled = false;
-		listSiteTags(site).then(tags => {
-			if (!cancelled) {
-				setSiteTags(tags);
-			}
-		});
+		listSiteTags(site)
+			.then(tags => {
+				if (!cancelled) {
+					setSiteTags(tags);
+				}
+			})
+			.catch(() => {
+				/* Secondary metadata: keep existing tags on failure */
+			});
 		return () => {
 			cancelled = true;
 		};

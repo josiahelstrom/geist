@@ -152,6 +152,22 @@ const ADMIN_HEADERS = {
  * Safety rules (plan §4): never send `html` or `?source=html` (rule 4.3), never
  * send `newsletter` (rule 4.2), and never follow redirects (rule 4.5).
  */
+function isAbortError(error: unknown): boolean {
+	if (error && typeof error === "object") {
+		const err = error as {name?: string; message?: string};
+		if (err.name === "AbortError" || err.name === "TimeoutError") {
+			return true;
+		}
+		if (
+			typeof err.message === "string" &&
+			(err.message.includes("aborted") || err.message.includes("timed out"))
+		) {
+			return true;
+		}
+	}
+	return false;
+}
+
 export async function api<T = any>(
 	site: Site,
 	path: string,
@@ -169,16 +185,27 @@ export async function api<T = any>(
 		headers.set("Content-Type", "application/json");
 	}
 
-	const res = await fetch(`${site.base}/ghost/api/admin${path}`, {
-		...init,
-		headers,
-		maxRedirections: 0,
-	});
+	try {
+		const res = await fetch(`${site.base}/ghost/api/admin${path}`, {
+			...init,
+			headers,
+			maxRedirections: 0,
+			signal: init.signal ?? AbortSignal.timeout(30_000),
+		});
 
-	if (!res.ok) {
-		throw await GhostError.from(res);
+		if (!res.ok) {
+			throw await GhostError.from(res);
+		}
+		return (res.status === 204 ? null : await res.json()) as T;
+	} catch (error) {
+		if (error instanceof GhostError) {
+			throw error;
+		}
+		if (isAbortError(error)) {
+			throw new Error("Request timed out. Check your connection and try again.");
+		}
+		throw error;
 	}
-	return (res.status === 204 ? null : await res.json()) as T;
 }
 
 export function normalizeBase(input: string): string {
@@ -206,17 +233,30 @@ type SiteProbe = {
  * `maxRedirections: 0`.
  */
 async function probeSite(input: string): Promise<SiteProbe> {
-	const probe = await fetch(
-		`${normalizeBase(input)}/ghost/api/admin/site/`,
-		{
-			headers: {"Accept-Version": ADMIN_HEADERS["Accept-Version"]},
-		},
-	);
-	if (!probe.ok) {
-		throw new Error(`Couldn't find a Ghost site there (HTTP ${probe.status})`);
+	let probe: Response;
+	let siteData: {site: {url: string; title: string; version: string}};
+	try {
+		probe = await fetch(
+			`${normalizeBase(input)}/ghost/api/admin/site/`,
+			{
+				headers: {"Accept-Version": ADMIN_HEADERS["Accept-Version"]},
+				signal: AbortSignal.timeout(10_000),
+			},
+		);
+		if (!probe.ok) {
+			throw new Error(`Couldn't find a Ghost site there (HTTP ${probe.status})`);
+		}
+		siteData = (await probe.json()) as {
+			site: {url: string; title: string; version: string};
+		};
+	} catch (error) {
+		if (isAbortError(error)) {
+			throw new Error("Connection timed out while reaching your Ghost site.");
+		}
+		throw error;
 	}
 
-	const {site} = await probe.json();
+	const {site} = siteData;
 
 	// Rule (plan §13): measure clock skew from the server's Date header so a
 	// token minted locally is not rejected by a server on a different clock.

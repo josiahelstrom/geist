@@ -109,6 +109,142 @@ function Disclosure({
 	);
 }
 
+const FOCUSABLE_SELECTOR =
+	'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+type RotateStaffTokenDialogProps = {
+	rotating: boolean;
+	rotateError: string | null;
+	onClose: () => void;
+	onConfirm: () => void;
+};
+
+function RotateStaffTokenDialog({
+	rotating,
+	rotateError,
+	onClose,
+	onConfirm,
+}: RotateStaffTokenDialogProps) {
+	const dialogRef = useRef<HTMLDivElement | null>(null);
+	const cancelRef = useRef<HTMLButtonElement | null>(null);
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
+	const rotatingRef = useRef(rotating);
+	rotatingRef.current = rotating;
+
+	// Focus the Cancel button on open, trap focus inside the dialog, close on Esc,
+	// and return focus to the trigger when unmounting (§4.6).
+	useEffect(() => {
+		const previous = document.activeElement as HTMLElement | null;
+		cancelRef.current?.focus();
+
+		function handleKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape") {
+				event.preventDefault();
+				if (!rotatingRef.current) {
+					onCloseRef.current();
+				}
+				return;
+			}
+			if (event.key !== "Tab" || !dialogRef.current) {
+				return;
+			}
+			const focusable = Array.from(
+				dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+			);
+			if (focusable.length === 0) {
+				return;
+			}
+			const first = focusable[0];
+			const last = focusable[focusable.length - 1];
+			const active = document.activeElement;
+			if (event.shiftKey && active === first) {
+				event.preventDefault();
+				last.focus();
+			} else if (!event.shiftKey && active === last) {
+				event.preventDefault();
+				first.focus();
+			}
+		}
+
+		document.addEventListener("keydown", handleKeyDown);
+		return () => {
+			document.removeEventListener("keydown", handleKeyDown);
+			if (previous && document.contains(previous)) {
+				previous.focus();
+			}
+		};
+	}, []);
+
+	return (
+		<div
+			className="rotate-dialog-backdrop"
+			onMouseDown={event => {
+				if (event.target === event.currentTarget && !rotating) {
+					onClose();
+				}
+			}}
+		>
+			<div
+				ref={dialogRef}
+				className="rotate-dialog"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="rotate-dialog-title"
+				aria-describedby="rotate-dialog-copy"
+				data-testid="rotate-staff-token-dialog"
+			>
+				<h2 id="rotate-dialog-title" className="rotate-dialog-title">
+					Rotate Staff Access Token?
+				</h2>
+				<p id="rotate-dialog-copy" className="rotate-dialog-copy">
+					Rotating your Staff Access Token will generate a new
+					secret and update Geist&apos;s Keychain entry. Any other
+					client using this staff token will need to be reconnected.
+					Continue?
+				</p>
+
+				{rotateError && (
+					<div className="rotate-dialog-error" role="alert">
+						{rotateError}
+					</div>
+				)}
+
+				<div className="rotate-dialog-actions">
+					<button
+						ref={cancelRef}
+						type="button"
+						className="rotate-dialog-cancel"
+						onClick={onClose}
+						disabled={rotating}
+					>
+						Cancel
+					</button>
+					<button
+						type="button"
+						className="rotate-dialog-confirm"
+						onClick={onConfirm}
+						disabled={rotating}
+						data-testid="confirm-rotate-staff-token"
+					>
+						{rotating ? (
+							<>
+								<span
+									className="connect-spinner"
+									aria-hidden="true"
+								/>
+								Rotating…
+							</>
+						) : (
+							"Rotate Token"
+						)}
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 export default function MetadataSidebar({
 	site,
 	postId,
@@ -147,20 +283,61 @@ export default function MetadataSidebar({
 		return () => window.clearTimeout(timer);
 	}, [rotateNote]);
 
-	// Escape closes the confirmation sheet.
+	const sidebarRef = useRef<HTMLElement | null>(null);
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
+	const confirmingRotateRef = useRef(confirmingRotate);
+	confirmingRotateRef.current = confirmingRotate;
+
+	// Focus is trapped while open (§5.2), Escape closes the drawer, and focus returns to the trigger.
 	useEffect(() => {
-		if (!confirmingRotate) {
-			return;
-		}
-		function onKeyDown(event: KeyboardEvent) {
-			if (event.key === "Escape" && !rotating) {
-				setConfirmingRotate(false);
-				setRotateError(null);
+		const trigger = document.activeElement as HTMLElement | null;
+		const sidebar = sidebarRef.current;
+		sidebar?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+
+		function handleKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape") {
+				if (confirmingRotateRef.current) {
+					return;
+				}
+				event.preventDefault();
+				onCloseRef.current();
+				return;
+			}
+			if (event.key !== "Tab" || !sidebar || confirmingRotateRef.current) {
+				return;
+			}
+			const focusable = Array.from(
+				sidebar.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+			).filter(
+				el =>
+					!el.closest("[hidden]") &&
+					(el.offsetParent !== null || el.getClientRects().length > 0) &&
+					el.getAttribute("aria-hidden") !== "true",
+			);
+			if (focusable.length === 0) {
+				return;
+			}
+			const first = focusable[0];
+			const last = focusable[focusable.length - 1];
+			const active = document.activeElement;
+			if (event.shiftKey && active === first) {
+				event.preventDefault();
+				last.focus();
+			} else if (!event.shiftKey && active === last) {
+				event.preventDefault();
+				first.focus();
 			}
 		}
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [confirmingRotate, rotating]);
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => {
+			window.removeEventListener("keydown", handleKeyDown);
+			if (trigger && document.contains(trigger)) {
+				trigger.focus();
+			}
+		};
+	}, []);
 
 	const canEditAuthors = canEditAuthorsRole(site.role);
 	const canEditVisibility = canEditVisibilityRole(site.role);
@@ -379,12 +556,15 @@ export default function MetadataSidebar({
 
 	return (
 		<aside
+			ref={sidebarRef}
 			className="inspector meta-sidebar"
 			data-testid="meta-sidebar"
-			aria-label="Post settings"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="metadata-sidebar-title"
 		>
 			<header className="inspector-header">
-				<h2 className="inspector-title">Post settings</h2>
+				<h2 id="metadata-sidebar-title" className="inspector-title">Post settings</h2>
 				<button
 					type="button"
 					className="inspector-close"
@@ -464,8 +644,12 @@ export default function MetadataSidebar({
 						</p>
 					)}
 
-					<label className="inspector-checkbox">
+					<label
+						className="inspector-checkbox"
+						htmlFor="featured-post-checkbox"
+					>
 						<input
+							id="featured-post-checkbox"
 							type="checkbox"
 							checked={meta.featured}
 							onChange={e =>
@@ -589,18 +773,23 @@ export default function MetadataSidebar({
 				</Disclosure>
 
 				<Disclosure title="Feature image">
-					<label className="inspector-checkbox">
+					<label
+						className="inspector-checkbox"
+						htmlFor="show-feature-image-checkbox"
+					>
 						<input
+							id="show-feature-image-checkbox"
 							type="checkbox"
 							checked={uiPrefs.showFeatureImage}
 							onChange={e =>
 								setUiPrefs({showFeatureImage: e.target.checked})
 							}
+							aria-describedby="show-feature-image-hint"
 							data-testid="show-feature-image-checkbox"
 						/>
 						<span>Show in editor</span>
 					</label>
-					<p className="inspector-hint">
+					<p id="show-feature-image-hint" className="inspector-hint">
 						Controls whether the image appears at the top of the writing
 						view.
 					</p>
@@ -610,6 +799,8 @@ export default function MetadataSidebar({
 						accept="image/*"
 						onChange={handleFeatureImageSelect}
 						disabled={readOnly}
+						tabIndex={-1}
+						aria-hidden="true"
 						style={{display: "none"}}
 						data-testid="feature-image-file-input"
 					/>
@@ -726,18 +917,23 @@ export default function MetadataSidebar({
 							{meta.customExcerpt.length}/{MAX_EXCERPT_LENGTH}
 						</span>
 					</div>
-					<label className="inspector-checkbox">
+					<label
+						className="inspector-checkbox"
+						htmlFor="always-show-excerpt-checkbox"
+					>
 						<input
+							id="always-show-excerpt-checkbox"
 							type="checkbox"
 							checked={uiPrefs.alwaysShowExcerpt}
 							onChange={e =>
 								setUiPrefs({alwaysShowExcerpt: e.target.checked})
 							}
+							aria-describedby="always-show-excerpt-hint"
 							data-testid="always-show-excerpt-checkbox"
 						/>
 						<span>Always show under title</span>
 					</label>
-					<p className="inspector-hint">
+					<p id="always-show-excerpt-hint" className="inspector-hint">
 						Empty excerpts are hidden in the writing view unless this is
 						on.
 					</p>
@@ -807,19 +1003,24 @@ export default function MetadataSidebar({
 						Controls the body font in the editor canvas.
 					</p>
 
-					<label className="inspector-checkbox">
+					<label
+						className="inspector-checkbox"
+						htmlFor="typewriter-mode-checkbox"
+					>
 						<input
+							id="typewriter-mode-checkbox"
 							type="checkbox"
 							checked={uiPrefs.typewriterMode}
 							onChange={e =>
 								setUiPrefs({typewriterMode: e.target.checked})
 							}
+							aria-describedby="typewriter-mode-hint"
 							data-testid="typewriter-mode-checkbox"
 						/>
 						<span>Typewriter scrolling</span>
 					</label>
-					<p className="inspector-hint">
-						Keep active line vertically centered
+					<p id="typewriter-mode-hint" className="inspector-hint">
+						Keep active line vertically centered.
 					</p>
 				</Disclosure>
 
@@ -928,76 +1129,15 @@ export default function MetadataSidebar({
 			</div>
 			{confirmingRotate &&
 				createPortal(
-					<div
-						className="rotate-dialog-backdrop"
-						onMouseDown={event => {
-							if (event.target === event.currentTarget && !rotating) {
-								setConfirmingRotate(false);
-								setRotateError(null);
-							}
+					<RotateStaffTokenDialog
+						rotating={rotating}
+						rotateError={rotateError}
+						onClose={() => {
+							setConfirmingRotate(false);
+							setRotateError(null);
 						}}
-					>
-						<div
-							className="rotate-dialog"
-							role="dialog"
-							aria-modal="true"
-							aria-labelledby="rotate-dialog-title"
-							aria-describedby="rotate-dialog-copy"
-							data-testid="rotate-staff-token-dialog"
-						>
-							<h2
-								id="rotate-dialog-title"
-								className="rotate-dialog-title"
-							>
-								Rotate Staff Access Token?
-							</h2>
-							<p id="rotate-dialog-copy" className="rotate-dialog-copy">
-								Rotating your Staff Access Token will generate a new
-								secret and update Geist&apos;s Keychain entry. Any other
-								client using this staff token will need to be reconnected.
-								Continue?
-							</p>
-
-							{rotateError && (
-								<div className="rotate-dialog-error" role="alert">
-									{rotateError}
-								</div>
-							)}
-
-							<div className="rotate-dialog-actions">
-								<button
-									type="button"
-									className="rotate-dialog-cancel"
-									onClick={() => {
-										setConfirmingRotate(false);
-										setRotateError(null);
-									}}
-									disabled={rotating}
-								>
-									Cancel
-								</button>
-								<button
-									type="button"
-									className="rotate-dialog-confirm"
-									onClick={handleRotateStaffToken}
-									disabled={rotating}
-									data-testid="confirm-rotate-staff-token"
-								>
-									{rotating ? (
-										<>
-											<span
-												className="connect-spinner"
-												aria-hidden="true"
-											/>
-											Rotating…
-										</>
-									) : (
-										"Rotate Token"
-									)}
-								</button>
-							</div>
-						</div>
-					</div>,
+						onConfirm={handleRotateStaffToken}
+					/>,
 					document.body,
 				)}
 		</aside>

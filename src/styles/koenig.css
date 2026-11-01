@@ -28,7 +28,7 @@
 }
 
 .koenig-lexical {
-	--kg-accent-color: var(--status-publish);
+	--kg-accent-color: var(--ink-link);
 	background: transparent;
 	color: var(--fg-primary);
 	font-family: var(--editor-font-body);
@@ -165,7 +165,7 @@
 
 .koenig-lexical .kg-prose a,
 .koenig-lexical .kg-prose a span {
-	color: var(--status-publish) !important;
+	color: var(--ink-link) !important;
 	text-decoration: underline;
 	text-decoration-thickness: 1px;
 	text-underline-offset: 2px;

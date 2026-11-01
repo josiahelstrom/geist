@@ -295,7 +295,6 @@ export default function ScrapsList({
 								type="button"
 								className="scrap-row-main"
 								onClick={() => onOpenScrap(scrap)}
-								aria-label={`Edit ${title}`}
 							>
 								<span className="scrap-row-body">
 									<span className="scrap-row-title-row">

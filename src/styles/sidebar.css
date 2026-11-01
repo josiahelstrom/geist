@@ -182,6 +182,11 @@
 	outline: none;
 }
 
+.navigation-rail .rail-search-input:focus-visible {
+	outline: 2px solid var(--accent-primary-bg);
+	outline-offset: 1px;
+}
+
 .navigation-rail .rail-search-input::-webkit-search-cancel-button {
 	-webkit-appearance: none;
 }
@@ -465,6 +470,11 @@
 .post-list-pane .post-list-search:focus {
 	border-color: var(--fg-muted);
 	outline: none;
+}
+
+.post-list-pane .post-list-search:focus-visible {
+	outline: 2px solid var(--accent-primary-bg);
+	outline-offset: 1px;
 }
 
 .post-list-pane .post-list-select {
@@ -785,7 +795,7 @@
 
 .post-list-message {
 	margin: var(--space-6) 0;
-	color: var(--fg-muted);
+	color: var(--fg-secondary);
 	font-size: 13px;
 }
 
@@ -795,7 +805,7 @@
 	align-items: center;
 	gap: var(--space-3);
 	padding: var(--space-10) 0;
-	color: var(--fg-muted);
+	color: var(--fg-secondary);
 	font-size: 13px;
 	text-align: center;
 }
@@ -886,7 +896,7 @@
 .scrap-row-preview {
 	display: -webkit-box;
 	overflow: hidden;
-	color: var(--fg-muted);
+	color: var(--fg-secondary);
 	font-size: 12px;
 	line-height: 1.45;
 	-webkit-box-orient: vertical;
@@ -989,10 +999,23 @@
  * Narrow windows (§4.2): the rail becomes a toggleable overlay.
  * ------------------------------------------------------------------------- */
 
+.rail-scrim {
+	display: none;
+}
+
 @media (max-width: 1119px) {
 	.app-layout,
 	.app-layout[data-sidebar="collapsed"] {
 		grid-template-columns: 0 minmax(0, 1fr);
+	}
+
+	.rail-scrim {
+		display: block;
+		position: fixed;
+		inset: 0;
+		background: var(--scrim-sheet);
+		z-index: 1;
+		cursor: pointer;
 	}
 
 	.navigation-rail {
@@ -1002,6 +1025,7 @@
 		height: calc(100% - (var(--rail-inset) * 2));
 		margin: var(--rail-inset) 0 var(--rail-inset) var(--rail-inset);
 		box-shadow: var(--shadow-sheet);
+		z-index: 2;
 	}
 
 	.post-list-pane .post-list-search {

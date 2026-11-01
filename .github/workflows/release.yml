@@ -28,8 +28,28 @@ permissions:
   contents: write
 
 jobs:
+  version-guard:
+    name: Verify version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Guard tag and app version match
+        run: |
+          if [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            node -e "const v=require('./package.json').version; if (v!=='$TAG_VERSION') { console.error('tag', process.argv[1], '!= package.json', v); process.exit(1) }" "$TAG_VERSION"
+          fi
+          node -e "const v=require('./package.json').version, t=require('./src-tauri/tauri.conf.json').version, c=require('fs').readFileSync('./src-tauri/Cargo.toml','utf8').match(/^version\s*=\s*\"([^\"]+)\"/m)[1]; if (t!==v || c!==v) { console.error('version mismatch: package.json='+v+', tauri.conf.json='+t+', Cargo.toml='+c); process.exit(1) }"
+
   publish-tauri:
     name: Publish (${{ matrix.target || matrix.platform }})
+    needs: [version-guard]
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false

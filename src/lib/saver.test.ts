@@ -391,4 +391,44 @@ describe("conflict handling", () => {
 			updated_at: "T_SERVER_LATEST",
 		});
 	});
+
+	it("drains all queued patches on flush even after a previous failure", async () => {
+		responder = () => fail(500, "INTERNAL_ERROR", "boom");
+		const saver = createSaver(SITE, "p1", "T0", {
+			onStatus: () => {},
+			onConflict: () => {},
+		});
+
+		await saver.queue({title: "first"});
+		expect(saver.lastError).toBeTruthy();
+		expect(puts).toHaveLength(1);
+
+		responder = () => ok({posts: [{updated_at: "T1"}]});
+		saver.queueDebounced({title: "second"});
+		await saver.flush();
+
+		expect(saver.lastError).toBeNull();
+		expect(saver.hasPending).toBe(false);
+		expect(puts).toHaveLength(2);
+		expect(JSON.parse(puts[1].body as string).posts[0].title).toBe("second");
+	});
+
+	it("keeps pending state and sets lastError when flush fails so publish is refused", async () => {
+		responder = () => fail(500, "INTERNAL_ERROR", "server down");
+		const saver = createSaver(SITE, "p1", "T0", {
+			onStatus: () => {},
+			onConflict: () => {},
+		});
+
+		saver.queueDebounced({title: "unsaved changes before publish"});
+		await saver.flush();
+
+		// Editor's publish flow checks:
+		// saver.hasPending || saver.conflict || Boolean(saver.lastError)
+		const blocked =
+			saver.hasPending || saver.conflict || Boolean(saver.lastError);
+		expect(blocked).toBe(true);
+		expect(saver.hasPending).toBe(true);
+		expect(saver.lastError).toBeTruthy();
+	});
 });

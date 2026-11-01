@@ -14,9 +14,12 @@ export type CachedDraft = {
 	siteBase: string;
 	post: PostDetail;
 	cachedAt: string; // ISO timestamp
+	lastOpenedAt?: string; // ISO timestamp
 	dirty: boolean; // whether there are un-synced local edits
 	pendingPatch?: Partial<PostDetail> | null;
 };
+
+export const MAX_CACHED_DRAFTS_PER_SITE = 50;
 
 const STORE_FILE = "draft_cache.json";
 
@@ -131,6 +134,12 @@ function normalizeDraft(value: unknown, siteBase: string): CachedDraft | null {
 			typeof value.cachedAt === "string"
 				? value.cachedAt
 				: new Date(0).toISOString(),
+		lastOpenedAt:
+			typeof value.lastOpenedAt === "string"
+				? value.lastOpenedAt
+				: typeof value.cachedAt === "string"
+					? value.cachedAt
+					: new Date(0).toISOString(),
 		dirty: value.dirty === true,
 		pendingPatch,
 	};
@@ -196,7 +205,8 @@ async function writeDrafts(
 }
 
 function draftTimestamp(draft: CachedDraft): number {
-	const parsed = Date.parse(draft.cachedAt);
+	const str = draft.lastOpenedAt || draft.cachedAt;
+	const parsed = Date.parse(str);
 	return Number.isNaN(parsed) ? 0 : parsed;
 }
 
@@ -205,6 +215,39 @@ function hasPendingPatch(draft: CachedDraft): boolean {
 		isRecord(draft.pendingPatch) &&
 		Object.keys(draft.pendingPatch).length > 0
 	);
+}
+
+function isCleanDraft(draft: CachedDraft): boolean {
+	return !draft.dirty && !hasPendingPatch(draft);
+}
+
+function enforceDraftCap(
+	drafts: CachedDraft[],
+	cap = MAX_CACHED_DRAFTS_PER_SITE,
+): CachedDraft[] {
+	if (drafts.length <= cap) {
+		return drafts;
+	}
+
+	let toEvict = drafts.length - cap;
+	const cleanCandidates = drafts
+		.filter(isCleanDraft)
+		.sort((a, b) => draftTimestamp(a) - draftTimestamp(b));
+
+	const evictedIds = new Set<string>();
+	for (const candidate of cleanCandidates) {
+		if (toEvict <= 0) {
+			break;
+		}
+		evictedIds.add(candidate.postId);
+		toEvict--;
+	}
+
+	if (evictedIds.size === 0) {
+		return drafts;
+	}
+
+	return drafts.filter(draft => !evictedIds.has(draft.postId));
 }
 
 /**
@@ -220,11 +263,13 @@ export async function cacheDraft(
 ): Promise<void> {
 	return runExclusive(siteBase, async () => {
 		const drafts = await readDrafts(siteBase);
+		const now = new Date().toISOString();
 		const cached: CachedDraft = {
 			postId: post.id,
 			siteBase,
 			post: cloneValue(post),
-			cachedAt: new Date().toISOString(),
+			cachedAt: now,
+			lastOpenedAt: now,
 			dirty: options?.dirty ?? false,
 			pendingPatch: options?.pendingPatch
 				? cloneValue(options.pendingPatch)
@@ -232,13 +277,14 @@ export async function cacheDraft(
 		};
 
 		const index = drafts.findIndex(draft => draft.postId === post.id);
-		const next =
+		const updated =
 			index === -1
 				? [...drafts, cached]
 				: drafts.map((draft, current) =>
 						current === index ? cached : draft,
 					);
 
+		const next = enforceDraftCap(updated);
 		await writeDrafts(siteBase, next);
 	});
 }
@@ -246,11 +292,26 @@ export async function cacheDraft(
 export async function getCachedDraft(
 	siteBase: string,
 	postId: string,
+	opts?: { touch?: boolean },
 ): Promise<CachedDraft | null> {
+	const touch = opts?.touch ?? true;
 	return runExclusive(siteBase, async () => {
 		const drafts = await readDrafts(siteBase);
-		const draft = drafts.find(candidate => candidate.postId === postId);
-		return draft ? cloneDraft(draft) : null;
+		const index = drafts.findIndex(candidate => candidate.postId === postId);
+		if (index === -1) {
+			return null;
+		}
+		const draft = drafts[index];
+		if (!touch) {
+			return cloneDraft(draft);
+		}
+		const updated: CachedDraft = {
+			...draft,
+			lastOpenedAt: new Date().toISOString(),
+		};
+		const next = drafts.map((d, i) => (i === index ? updated : d));
+		await writeDrafts(siteBase, next);
+		return cloneDraft(updated);
 	});
 }
 
@@ -300,20 +361,21 @@ export async function markDraftClean(
 		}
 
 		const current = drafts[index];
+		const now = new Date().toISOString();
 		const cleaned: CachedDraft = {
 			...current,
 			post: cloneValue(updatedPost),
-			cachedAt: new Date().toISOString(),
+			cachedAt: now,
+			lastOpenedAt: now,
 			dirty: false,
 			pendingPatch: null,
 		};
 
-		await writeDrafts(
-			siteBase,
-			drafts.map((draft, position) =>
-				position === index ? cleaned : draft,
-			),
+		const updated = drafts.map((draft, position) =>
+			position === index ? cleaned : draft,
 		);
+		const next = enforceDraftCap(updated);
+		await writeDrafts(siteBase, next);
 	});
 }
 

@@ -329,7 +329,7 @@
 	margin: var(--space-1) 0 0;
 	font-size: 12px;
 	line-height: 1.45;
-	color: var(--fg-muted);
+	color: var(--fg-secondary);
 	display: -webkit-box;
 	-webkit-box-orient: vertical;
 	-webkit-line-clamp: 2;
