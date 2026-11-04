@@ -76,12 +76,14 @@ describe("ui preferences storage", () => {
 			showFeatureImage: true,
 			editorFont: "serif",
 			typewriterMode: false,
+			editorEngine: "lexical-lab",
 		});
 		expect(DEFAULT_UI_PREFS).toEqual({
 			alwaysShowExcerpt: false,
 			showFeatureImage: true,
 			editorFont: "serif",
 			typewriterMode: false,
+			editorEngine: "lexical-lab",
 		});
 	});
 
@@ -93,6 +95,7 @@ describe("ui preferences storage", () => {
 			showFeatureImage: true,
 			editorFont: "serif",
 			typewriterMode: false,
+			editorEngine: "lexical-lab",
 		});
 	});
 
@@ -105,6 +108,7 @@ describe("ui preferences storage", () => {
 			showFeatureImage: true,
 			editorFont: "serif",
 			typewriterMode: false,
+			editorEngine: "lexical-lab",
 		});
 	});
 
@@ -115,6 +119,7 @@ describe("ui preferences storage", () => {
 				showFeatureImage: "yes",
 				editorFont: "comic-sans",
 				typewriterMode: "enabled",
+				editorEngine: "invalid-engine",
 				unknownKey: "ignored",
 			}),
 		});
@@ -125,6 +130,7 @@ describe("ui preferences storage", () => {
 			showFeatureImage: true,
 			editorFont: "serif",
 			typewriterMode: false,
+			editorEngine: "lexical-lab",
 		});
 	});
 
@@ -134,6 +140,7 @@ describe("ui preferences storage", () => {
 				showFeatureImage: false,
 				editorFont: "mono",
 				typewriterMode: true,
+				editorEngine: "koenig",
 			}),
 		});
 		const {getUiPrefs} = await loadModule();
@@ -143,6 +150,7 @@ describe("ui preferences storage", () => {
 			showFeatureImage: false,
 			editorFont: "mono",
 			typewriterMode: true,
+			editorEngine: "koenig",
 		});
 	});
 });
@@ -161,6 +169,7 @@ describe("setUiPrefs", () => {
 			showFeatureImage: false,
 			editorFont: "serif",
 			typewriterMode: false,
+			editorEngine: "lexical-lab",
 		});
 		expect(getUiPrefs()).toEqual(first);
 
@@ -168,6 +177,7 @@ describe("setUiPrefs", () => {
 			alwaysShowExcerpt: true,
 			editorFont: "sans",
 			typewriterMode: true,
+			editorEngine: "koenig",
 		});
 
 		expect(second).toEqual({
@@ -175,6 +185,7 @@ describe("setUiPrefs", () => {
 			showFeatureImage: false,
 			editorFont: "sans",
 			typewriterMode: true,
+			editorEngine: "koenig",
 		});
 		expect(getUiPrefs()).toEqual(second);
 		expect(localStorage.getItem("geist.ui-prefs.v1")).toBe(
@@ -211,6 +222,22 @@ describe("setUiPrefs", () => {
 		// @ts-expect-error test invalid value runtime protection
 		setUiPrefs({editorFont: "invalid"});
 		expect(getUiPrefs().editorFont).toBe("mono");
+	});
+
+	it("updates editorEngine independently and ignores invalid values in patch", async () => {
+		installWindow();
+		const {getUiPrefs, setUiPrefs} = await loadModule();
+
+		expect(getUiPrefs().editorEngine).toBe("lexical-lab");
+		setUiPrefs({editorEngine: "koenig"});
+		expect(getUiPrefs().editorEngine).toBe("koenig");
+
+		// @ts-expect-error test invalid value runtime protection
+		setUiPrefs({editorEngine: "unknown-engine"});
+		expect(getUiPrefs().editorEngine).toBe("koenig");
+
+		setUiPrefs({editorEngine: "lexical-lab"});
+		expect(getUiPrefs().editorEngine).toBe("lexical-lab");
 	});
 
 	it("stops notifying after unsubscribe", async () => {
