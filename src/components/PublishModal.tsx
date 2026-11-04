@@ -29,6 +29,7 @@ type Props = {
 	newsletters: NewsletterSummary[];
 	membersEnabled: boolean;
 	busy: boolean;
+	tkCount?: number;
 	onExecute: (action: PublishAction) => Promise<void>;
 	onClose: () => void;
 };
@@ -77,6 +78,7 @@ export default function PublishModal({
 	newsletters,
 	membersEnabled,
 	busy,
+	tkCount = 0,
 	onExecute,
 	onClose,
 }: Props) {
@@ -262,6 +264,25 @@ export default function PublishModal({
 
 				<form className="sheet-form" onSubmit={handleSubmit}>
 					<div className="sheet-body">
+						{tkCount > 0 && (
+							<div
+								className="warn-banner sheet-warn"
+								role="status"
+								data-testid="tk-publish-warning"
+							>
+								<div className="sheet-warn-copy">
+									<strong>
+										{tkCount} unfinished “TK”{" "}
+										{tkCount === 1 ? "placeholder" : "placeholders"} in this post
+									</strong>
+									<div>
+										Review your document before publishing to make sure no
+										editorial “To Come” markers remain.
+									</div>
+								</div>
+							</div>
+						)}
+
 						{postStatus === "scheduled" && scheduledAt && (
 							<p className="sheet-note" data-testid="current-schedule">
 								Currently scheduled for{" "}

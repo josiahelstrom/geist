@@ -1,6 +1,7 @@
 import {useSyncExternalStore} from "react";
 
 export type EditorFont = "serif" | "sans" | "mono";
+export type EditorEngine = "koenig" | "lexical-lab";
 
 export type UiPrefs = {
 	/** Keep the excerpt row visible under the title even when the post has no excerpt. */
@@ -11,6 +12,8 @@ export type UiPrefs = {
 	editorFont: EditorFont;
 	/** Keep the active line vertically centered while typing. */
 	typewriterMode: boolean;
+	/** Editor engine for scraps and posts. */
+	editorEngine: EditorEngine;
 };
 
 const UI_PREFS_KEY = "geist.ui-prefs.v1";
@@ -21,6 +24,7 @@ export const DEFAULT_UI_PREFS: UiPrefs = {
 	showFeatureImage: true,
 	editorFont: "serif",
 	typewriterMode: false,
+	editorEngine: "lexical-lab",
 };
 
 const listeners = new Set<(prefs: UiPrefs) => void>();
@@ -62,6 +66,11 @@ function readUiPrefs(): UiPrefs {
 			? record.editorFont
 			: DEFAULT_UI_PREFS.editorFont;
 
+	const editorEngine =
+		record.editorEngine === "lexical-lab" || record.editorEngine === "koenig"
+			? record.editorEngine
+			: DEFAULT_UI_PREFS.editorEngine;
+
 	return {
 		alwaysShowExcerpt:
 			typeof record.alwaysShowExcerpt === "boolean"
@@ -76,6 +85,7 @@ function readUiPrefs(): UiPrefs {
 			typeof record.typewriterMode === "boolean"
 				? record.typewriterMode
 				: DEFAULT_UI_PREFS.typewriterMode,
+		editorEngine,
 	};
 }
 
@@ -123,6 +133,10 @@ export function setUiPrefs(patch: Partial<UiPrefs>): UiPrefs {
 			typeof patch.typewriterMode === "boolean"
 				? patch.typewriterMode
 				: current.typewriterMode,
+		editorEngine:
+			patch.editorEngine === "lexical-lab" || patch.editorEngine === "koenig"
+				? patch.editorEngine
+				: current.editorEngine,
 	};
 
 	cache = next;

@@ -379,3 +379,9 @@ export function filterPosts(
 }
 
 export {GhostError};
+export {
+	fetchAutocompleteLinks,
+	searchLinks,
+	type LinkGroup,
+	type LinkItem,
+} from "./cardConfig";

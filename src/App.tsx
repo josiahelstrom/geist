@@ -27,9 +27,11 @@ import Connect from "./components/Connect";
 import NavigationRail from "./components/NavigationRail";
 import PostList from "./components/PostList";
 import Editor from "./components/Editor";
+import LexicalLabEditor from "./components/lab/LexicalLabEditor";
 import ScrapsList from "./components/ScrapsList";
 import TitleBar from "./components/TitleBar";
 import UpdateBanner from "./components/UpdateBanner";
+import {setUiPrefs, useUiPrefs} from "./lib/uiPrefs";
 
 type View =
 	| {name: "connect"}
@@ -83,6 +85,7 @@ function pressControl(testId: string): boolean {
 }
 
 export default function App() {
+	const uiPrefs = useUiPrefs();
 	const [sites, setSites] = useState<Site[]>(() => loadSites());
 	const [site, setSite] = useState<Site | null>(null);
 	const [route, setRoute] = useState<View>({name: "connect"});
@@ -353,6 +356,18 @@ export default function App() {
 			}
 			if (
 				(event.metaKey || event.ctrlKey) &&
+				event.altKey &&
+				(event.key.toLowerCase() === "e" || event.code === "KeyE")
+			) {
+				event.preventDefault();
+				setUiPrefs({
+					editorEngine:
+						uiPrefs.editorEngine === "lexical-lab" ? "koenig" : "lexical-lab",
+				});
+				return;
+			}
+			if (
+				(event.metaKey || event.ctrlKey) &&
 				!event.altKey &&
 				(event.key === "\\" || event.code === "Backslash")
 			) {
@@ -362,7 +377,7 @@ export default function App() {
 		}
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [toggleFocus, toggleSidebar]);
+	}, [toggleFocus, toggleSidebar, uiPrefs.editorEngine]);
 
 	// Focus mode fades its remaining chrome after 1.5s without activity. Any
 	// pointer move, keypress or scroll wakes it and restarts the timer.
@@ -704,26 +719,51 @@ export default function App() {
 			{updateBanner}
 			<div className="app-shell-body">
 				{route.name === "scrap-editor" && activeScrapId ? (
-					<Editor
-						key={activeScrapId}
-						site={site}
-						scrapId={activeScrapId}
-						onBack={handleBackToList}
-						onReconnect={handleDisconnect}
-						onOpenPost={handleOpenPost}
-					/>
+					uiPrefs.editorEngine === "lexical-lab" ? (
+						<LexicalLabEditor
+							key={activeScrapId}
+							site={site}
+							scrapId={activeScrapId}
+							onBack={handleBackToList}
+							onReconnect={handleDisconnect}
+							onOpenPost={handleOpenPost}
+						/>
+					) : (
+						<Editor
+							key={activeScrapId}
+							site={site}
+							scrapId={activeScrapId}
+							onBack={handleBackToList}
+							onReconnect={handleDisconnect}
+							onOpenPost={handleOpenPost}
+						/>
+					)
 				) : route.name === "editor" ? (
-					<Editor
-						key={`${site.base}:${route.postId}`}
-						site={site}
-						postId={route.postId}
-						onBack={handleBackToList}
-						onReconnect={handleDisconnect}
-						onOpenScrap={handleOpenScrap}
-						onTitleChange={title =>
-							setActivePost(prev => (prev ? {...prev, title} : prev))
-						}
-					/>
+					uiPrefs.editorEngine === "lexical-lab" ? (
+						<LexicalLabEditor
+							key={`${site.base}:${route.postId}`}
+							site={site}
+							postId={route.postId}
+							onBack={handleBackToList}
+							onReconnect={handleDisconnect}
+							onOpenScrap={handleOpenScrap}
+							onTitleChange={title =>
+								setActivePost(prev => (prev ? {...prev, title} : prev))
+							}
+						/>
+					) : (
+						<Editor
+							key={`${site.base}:${route.postId}`}
+							site={site}
+							postId={route.postId}
+							onBack={handleBackToList}
+							onReconnect={handleDisconnect}
+							onOpenScrap={handleOpenScrap}
+							onTitleChange={title =>
+								setActivePost(prev => (prev ? {...prev, title} : prev))
+							}
+						/>
+					)
 				) : null}
 			</div>
 		</div>
