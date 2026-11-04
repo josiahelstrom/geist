@@ -263,6 +263,10 @@ export async function cacheDraft(
 ): Promise<void> {
 	return runExclusive(siteBase, async () => {
 		const drafts = await readDrafts(siteBase);
+		const index = drafts.findIndex(draft => draft.postId === post.id);
+		const existing = index !== -1 ? drafts[index] : undefined;
+		const preserveDirty =
+			options?.dirty === undefined && Boolean(existing?.dirty);
 		const now = new Date().toISOString();
 		const cached: CachedDraft = {
 			postId: post.id,
@@ -270,13 +274,17 @@ export async function cacheDraft(
 			post: cloneValue(post),
 			cachedAt: now,
 			lastOpenedAt: now,
-			dirty: options?.dirty ?? false,
-			pendingPatch: options?.pendingPatch
-				? cloneValue(options.pendingPatch)
-				: null,
+			dirty: preserveDirty ? true : (options?.dirty ?? false),
+			pendingPatch:
+				options?.pendingPatch !== undefined
+					? options.pendingPatch
+						? cloneValue(options.pendingPatch)
+						: null
+					: preserveDirty && existing?.pendingPatch
+						? cloneValue(existing.pendingPatch)
+						: null,
 		};
 
-		const index = drafts.findIndex(draft => draft.postId === post.id);
 		const updated =
 			index === -1
 				? [...drafts, cached]
@@ -373,6 +381,91 @@ export async function markDraftClean(
 
 		const updated = drafts.map((draft, position) =>
 			position === index ? cleaned : draft,
+		);
+		const next = enforceDraftCap(updated);
+		await writeDrafts(siteBase, next);
+	});
+}
+
+/**
+ * Marks a cached draft as dirty and merges `patch` into its `pendingPatch` and
+ * cached `post` snapshot so offline edits are preserved across restarts.
+ */
+export async function markDraftDirty(
+	siteBase: string,
+	postId: string,
+	patch: Partial<PostDetail> | Record<string, unknown>,
+): Promise<void> {
+	return runExclusive(siteBase, async () => {
+		const drafts = await readDrafts(siteBase);
+		const index = drafts.findIndex(draft => draft.postId === postId);
+		if (index === -1) {
+			return;
+		}
+
+		const current = drafts[index];
+		const now = new Date().toISOString();
+		const mergedPatch = {
+			...(current.pendingPatch ?? {}),
+			...(patch as Partial<PostDetail>),
+		};
+		const updatedDraft: CachedDraft = {
+			...current,
+			post: cloneValue({
+				...current.post,
+				...mergedPatch,
+				id: postId,
+			}),
+			cachedAt: now,
+			lastOpenedAt: now,
+			dirty: true,
+			pendingPatch: cloneValue(mergedPatch),
+		};
+
+		const updated = drafts.map((draft, position) =>
+			position === index ? updatedDraft : draft,
+		);
+		const next = enforceDraftCap(updated);
+		await writeDrafts(siteBase, next);
+	});
+}
+
+/**
+ * Records that a draft's edits were synced to Ghost with a new `updated_at`
+ * timestamp, merging `patch` into the cached `post` and clearing `dirty` and
+ * `pendingPatch`.
+ */
+export async function markDraftSynced(
+	siteBase: string,
+	postId: string,
+	updatedAt: string,
+	patch?: Partial<PostDetail> | Record<string, unknown>,
+): Promise<void> {
+	return runExclusive(siteBase, async () => {
+		const drafts = await readDrafts(siteBase);
+		const index = drafts.findIndex(draft => draft.postId === postId);
+		if (index === -1) {
+			return;
+		}
+
+		const current = drafts[index];
+		const now = new Date().toISOString();
+		const synced: CachedDraft = {
+			...current,
+			post: cloneValue({
+				...current.post,
+				...((patch as Partial<PostDetail>) ?? {}),
+				id: postId,
+				updated_at: updatedAt,
+			}),
+			cachedAt: now,
+			lastOpenedAt: now,
+			dirty: false,
+			pendingPatch: null,
+		};
+
+		const updated = drafts.map((draft, position) =>
+			position === index ? synced : draft,
 		);
 		const next = enforceDraftCap(updated);
 		await writeDrafts(siteBase, next);

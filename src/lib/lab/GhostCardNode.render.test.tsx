@@ -430,7 +430,7 @@ describe("GhostCardNode HTML decorator", () => {
 			metadata: {},
 		});
 
-		render(
+		const {rerender} = render(
 			<LabSiteContext.Provider value={{site}}>
 				{node.decorate(editor, {} as EditorConfig)}
 			</LabSiteContext.Provider>,
@@ -458,6 +458,28 @@ describe("GhostCardNode HTML decorator", () => {
 			expect(currentData.html).toContain("youtube.com/embed/123");
 			expect(currentData.metadata.title).toBe("Demo Video");
 		});
+
+		editor.getEditorState().read(() => {
+			const current = $getNodeByKey(node.getKey());
+			if ($isGhostCardNode(current)) {
+				rerender(
+					<LabSiteContext.Provider value={{site}}>
+						{current.decorate(editor, {} as EditorConfig)}
+					</LabSiteContext.Provider>,
+				);
+			}
+		});
+
+		const iframe = document.querySelector<HTMLIFrameElement>(
+			".ghost-card-embed-iframe",
+		);
+		expect(iframe).not.toBeNull();
+		expect(iframe?.getAttribute("sandbox")).toBe(
+			"allow-scripts allow-same-origin",
+		);
+		expect(iframe?.getAttribute("srcdoc")).toBe(
+			'<iframe src="https://www.youtube.com/embed/123"></iframe>',
+		);
 	});
 
 	it("toggles cardWidth between regular, wide, and full on image/video/gallery cards", async () => {

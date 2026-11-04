@@ -43,6 +43,8 @@ import {
 	listCachedDrafts,
 	listPendingPatches,
 	markDraftClean,
+	markDraftDirty,
+	markDraftSynced,
 	MAX_CACHED_DRAFTS_PER_SITE,
 	removeCachedDraft,
 } from "./draftCache";
@@ -131,6 +133,43 @@ describe("cacheDraft / getCachedDraft", () => {
 		expect(drafts[0].post.title).toBe("Edited title");
 		expect(drafts[0].cachedAt).toBe("2026-02-01T10:05:00.000Z");
 		expect(drafts[0].dirty).toBe(true);
+	});
+
+	it("preserves an existing dirty entry's dirty flag and pendingPatch when cacheDraft is called without options", async () => {
+		const post = makePost();
+		const pendingPatch: Partial<PostDetail> = {
+			title: "Offline unsynced title",
+			custom_excerpt: "Offline unsynced excerpt",
+		};
+		await cacheDraft(SITE, post, {dirty: true, pendingPatch});
+
+		setTime("2026-02-01T10:10:00.000Z");
+		await cacheDraft(SITE, makePost({title: "Server copy"}));
+
+		const cached = await getCachedDraft(SITE, post.id);
+		expect(cached?.dirty).toBe(true);
+		expect(cached?.pendingPatch).toEqual(pendingPatch);
+	});
+
+	it("marks a draft dirty with markDraftDirty and synced with markDraftSynced", async () => {
+		const post = makePost();
+		await cacheDraft(SITE, post);
+
+		setTime("2026-02-01T10:15:00.000Z");
+		await markDraftDirty(SITE, post.id, {title: "Offline edit"});
+		let cached = await getCachedDraft(SITE, post.id);
+		expect(cached?.dirty).toBe(true);
+		expect(cached?.pendingPatch).toEqual({title: "Offline edit"});
+
+		setTime("2026-02-01T10:20:00.000Z");
+		await markDraftSynced(SITE, post.id, "2026-02-01T10:20:00.000Z", {
+			title: "Offline edit",
+		});
+		cached = await getCachedDraft(SITE, post.id);
+		expect(cached?.dirty).toBe(false);
+		expect(cached?.pendingPatch).toBeNull();
+		expect(cached?.post.title).toBe("Offline edit");
+		expect(cached?.post.updated_at).toBe("2026-02-01T10:20:00.000Z");
 	});
 
 	it("returns copies so callers cannot mutate the cache", async () => {

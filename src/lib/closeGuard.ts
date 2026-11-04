@@ -23,36 +23,3 @@ export function shouldBlockUnload(state: CloseState): UnloadDecision {
 export function canDestroyAfterFlush(result: CloseState): boolean {
 	return !result.hasPending && !result.conflict;
 }
-
-export type CloseWorkflowDecision = "close" | "stay" | "destroy";
-
-/**
- * Coordinates the full close-confirmation workflow:
- * - nothing pending -> close immediately
- * - pending + user cancels -> do NOT destroy ("stay")
- * - pending + user accepts + flush clean -> destroy
- * - pending + flush failed/still pending -> do NOT destroy ("stay")
- */
-export async function executeCloseWorkflow(options: {
-	state: CloseState;
-	confirm: () => boolean | Promise<boolean>;
-	flush: () => Promise<void>;
-	afterFlushState: () => CloseState;
-}): Promise<CloseWorkflowDecision> {
-	if (shouldBlockUnload(options.state) === "close") {
-		return "close";
-	}
-	const userConfirmed = await options.confirm();
-	if (!userConfirmed) {
-		return "stay";
-	}
-	try {
-		await options.flush();
-		if (canDestroyAfterFlush(options.afterFlushState())) {
-			return "destroy";
-		}
-		return "stay";
-	} catch {
-		return "stay";
-	}
-}

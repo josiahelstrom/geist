@@ -548,6 +548,7 @@ export default function Editor({
 							await cacheDraft(
 								site.base,
 								postRef.current ?? merged,
+								{dirty: false},
 							);
 						}
 					} else {

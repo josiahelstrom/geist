@@ -1395,6 +1395,21 @@ html.dark .ghost-card-html-toggle:focus-visible,
 	color: var(--fg-muted, #9ca3af);
 }
 
+.ghost-card-embed-html {
+	margin-top: 0.5rem;
+	border: 1px solid var(--border-default, rgba(127, 127, 127, 0.3));
+	border-radius: var(--radius-md, 6px);
+	overflow: hidden;
+	background: var(--bg-surface, #ffffff);
+}
+
+.ghost-card-embed-iframe {
+	display: block;
+	width: 100%;
+	min-height: 220px;
+	border: 0;
+}
+
 /* Email */
 .ghost-card-email-banner {
 	display: flex;

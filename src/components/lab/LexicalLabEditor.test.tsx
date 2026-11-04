@@ -8,7 +8,8 @@ import {
 	type PostDetail,
 	type Site,
 } from "../../lib/api";
-import {createScrap, demoteDraftToScrap} from "../../lib/scraps";
+import {createScrap, demoteDraftToScrap, updateScrap} from "../../lib/scraps";
+import {__resetDraftCacheForTests, getCachedDraft} from "../../lib/draftCache";
 import {
 	deletePost,
 	publishWithNewsletter,
@@ -42,7 +43,13 @@ vi.mock("../../lib/cardConfig", async importOriginal => {
 
 vi.mock("../../lib/scraps", async importOriginal => {
 	const actual = await importOriginal<typeof import("../../lib/scraps")>();
-	return {...actual, demoteDraftToScrap: vi.fn()};
+	return {
+		...actual,
+		demoteDraftToScrap: vi.fn(),
+		updateScrap: vi.fn((...args: Parameters<typeof actual.updateScrap>) =>
+			actual.updateScrap(...args),
+		),
+	};
 });
 
 vi.mock("../../lib/posts", async importOriginal => {
@@ -70,6 +77,7 @@ vi.mock("../../lib/saver", async importOriginal => {
 
 afterEach(() => {
 	cleanup();
+	__resetDraftCacheForTests();
 	vi.clearAllMocks();
 });
 
@@ -1348,6 +1356,130 @@ describe("LexicalLabEditor", () => {
 			expect(screen.getByTestId("tk-publish-warning")).toHaveTextContent(
 				"2 unfinished “TK” placeholders in this post",
 			);
+		});
+	});
+
+	it("restores pendingPatchRef on scrap autosave error so a subsequent save retries the failed patch", async () => {
+		const scrap = await createScrap(SITE.base, {
+			title: "Retry Scrap",
+		});
+
+		render(<LexicalLabEditor site={SITE} scrapId={scrap.id} />);
+
+		await waitFor(() => {
+			expect(screen.getByDisplayValue("Retry Scrap")).toBeInTheDocument();
+		});
+
+		vi.mocked(updateScrap).mockRejectedValueOnce(new Error("Disk busy"));
+
+		const titleInput = screen.getByDisplayValue("Retry Scrap");
+		fireEvent.change(titleInput, {target: {value: "Retried Title"}});
+
+		// Flush via Cmd+S (first attempt fails)
+		fireEvent.keyDown(window, {key: "s", metaKey: true});
+
+		await waitFor(() => {
+			expect(screen.getByTestId("save-status")).toHaveTextContent("Save failed");
+		});
+
+		// Flush again via Cmd+S (second attempt succeeds with restored patch)
+		fireEvent.keyDown(window, {key: "s", metaKey: true});
+
+		await waitFor(() => {
+			expect(screen.getByTestId("save-status")).toHaveTextContent("Saved");
+		});
+		expect(updateScrap).toHaveBeenLastCalledWith(SITE.base, scrap.id, {
+			title: "Retried Title",
+		});
+	});
+
+	it("wires draftCache on post load, offline save, and save success", async () => {
+		const post = draftPost();
+		vi.mocked(fetchPost).mockResolvedValue(post);
+
+		render(<LexicalLabEditor site={SITE} postId={post.id} />);
+
+		await waitFor(() => {
+			expect(screen.getByDisplayValue("Draft Post")).toBeInTheDocument();
+		});
+
+		await waitFor(async () => {
+			const cached = await getCachedDraft(SITE.base, post.id, {touch: false});
+			expect(cached?.post.title).toBe("Draft Post");
+			expect(cached?.dirty).toBe(false);
+		});
+
+		const saverOptions = vi.mocked(createSaver).mock.calls[0]?.[3];
+		expect(saverOptions?.onOfflineSave).toBeDefined();
+		expect(saverOptions?.onSaveSuccess).toBeDefined();
+
+		await saverOptions!.onOfflineSave!({title: "Offline Title"});
+		let cached = await getCachedDraft(SITE.base, post.id, {touch: false});
+		expect(cached?.dirty).toBe(true);
+		expect(cached?.pendingPatch).toEqual({title: "Offline Title"});
+
+		saverOptions!.onSaveSuccess!("2026-01-05T00:00:00.000Z", {
+			title: "Offline Title",
+		});
+		await waitFor(async () => {
+			cached = await getCachedDraft(SITE.base, post.id, {touch: false});
+			expect(cached?.dirty).toBe(false);
+			expect(cached?.pendingPatch).toBeNull();
+			expect(cached?.post.updated_at).toBe("2026-01-05T00:00:00.000Z");
+		});
+	});
+
+	it("renders 409 conflict banner and supports reloading server version or overwriting", async () => {
+		const post = draftPost();
+		vi.mocked(fetchPost).mockResolvedValue(post);
+
+		render(<LexicalLabEditor site={SITE} postId={post.id} />);
+
+		await waitFor(() => {
+			expect(screen.getByDisplayValue("Draft Post")).toBeInTheDocument();
+		});
+
+		const saverOptions = vi.mocked(createSaver).mock.calls[0]?.[3];
+		const saverInstance = vi.mocked(createSaver).mock.results[0]?.value;
+		const resumeSpy = vi
+			.spyOn(saverInstance, "resumeWithUpdatedAt")
+			.mockResolvedValue(undefined);
+
+		// Trigger conflict
+		saverOptions!.onConflict();
+
+		await waitFor(() => {
+			expect(screen.getByTestId("conflict-banner")).toBeInTheDocument();
+		});
+
+		// Test "Keep my edits & overwrite"
+		const serverPost: PostDetail = {
+			...post,
+			title: "Server Version Title",
+			updated_at: "2026-01-09T00:00:00.000Z",
+		};
+		vi.mocked(fetchPost).mockResolvedValueOnce(serverPost);
+
+		await userEvent.click(screen.getByTestId("conflict-overwrite-button"));
+
+		await waitFor(() => {
+			expect(resumeSpy).toHaveBeenCalledWith("2026-01-09T00:00:00.000Z");
+		});
+
+		// Trigger conflict again and test "Reload server version"
+		saverOptions!.onConflict();
+		await waitFor(() => {
+			expect(screen.getByTestId("conflict-banner")).toBeInTheDocument();
+		});
+
+		vi.mocked(fetchPost).mockResolvedValueOnce(serverPost);
+		await userEvent.click(screen.getByTestId("conflict-reload-button"));
+
+		await waitFor(() => {
+			expect(
+				screen.getByDisplayValue("Server Version Title"),
+			).toBeInTheDocument();
+			expect(screen.queryByTestId("conflict-banner")).not.toBeInTheDocument();
 		});
 	});
 });

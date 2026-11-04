@@ -67,11 +67,19 @@ import {
 	type PreviewMemberStatus,
 } from "../../lib/posts";
 import {openUrl} from "@tauri-apps/plugin-opener";
+import {getCurrentWindow} from "@tauri-apps/api/window";
 import {
 	DEFAULT_SETTINGS,
 	loadSiteSettings,
 	type SiteSettings,
 } from "../../lib/cardConfig";
+import {canDestroyAfterFlush, shouldBlockUnload} from "../../lib/closeGuard";
+import {
+	cacheDraft,
+	getCachedDraft,
+	markDraftDirty,
+	markDraftSynced,
+} from "../../lib/draftCache";
 import {buildRestorePatch, extractLexicalPlainText} from "../../lib/revisions";
 import {createSaver} from "../../lib/saver";
 import {shouldShowExcerpt, setUiPrefs, useUiPrefs} from "../../lib/uiPrefs";
@@ -571,6 +579,7 @@ export default function LexicalLabEditor({
 				setSaveStatus("clean");
 			}
 		} catch (err) {
+			pendingPatchRef.current = {...patch, ...pendingPatchRef.current};
 			console.error("LexicalLab autosave failed:", err);
 			if (mountedRef.current) {
 				setSaveStatus("error");
@@ -646,53 +655,88 @@ export default function LexicalLabEditor({
 					setLoading(false);
 				});
 		} else if (postId) {
+			const applyLoadedPost = (p: PostDetail) => {
+				setPost(p);
+				setTitle(p.title ?? "");
+				onTitleChangeRef.current?.(p.title ?? "");
+				setMeta(metaFromPost(p));
+				let extractedDefs: Record<string, string> = {};
+				const initialEditorState = convertInitialEditorState(p.lexical, {
+					onExtractFootnotes: defs => {
+						extractedDefs = {...extractedDefs, ...defs};
+					},
+				});
+				try {
+					latestJsonRef.current = JSON.parse(initialEditorState);
+				} catch {
+					latestJsonRef.current = null;
+				}
+				setFootnotes(extractedDefs);
+				footnotesRef.current = extractedDefs;
+				const initialSerialized = getInitialSerialized(
+					initialEditorState,
+					extractedDefs,
+				);
+				lastSavedContentRef.current = initialSerialized;
+				const initialCounts = computePlainTextCounts(
+					extractLexicalPlainText(initialSerialized),
+				);
+				setWordCount(initialCounts.wordCount);
+				setTkCount(initialCounts.tkCount);
+
+				saverRef.current = createSaver(site, p.id, p.updated_at, {
+					onStatus: s => {
+						if (mountedRef.current) {
+							setSaveStatus(s);
+						}
+					},
+					onConflict: () => {
+						if (mountedRef.current) {
+							setSaveStatus("conflict");
+						}
+					},
+					onOfflineSave: async patch => {
+						await markDraftDirty(site.base, p.id, patch);
+					},
+					onSaveSuccess: (updatedAt, patch) => {
+						void markDraftSynced(site.base, p.id, updatedAt, patch).catch(
+							() => {},
+						);
+					},
+				});
+				setLoading(false);
+			};
+
 			fetchPost(site, postId)
 				.then(p => {
 					if (cancelled) return;
-					setPost(p);
-					setTitle(p.title ?? "");
-					onTitleChangeRef.current?.(p.title ?? "");
-					setMeta(metaFromPost(p));
-					let extractedDefs: Record<string, string> = {};
-					const initialEditorState = convertInitialEditorState(p.lexical, {
-						onExtractFootnotes: defs => {
-							extractedDefs = {...extractedDefs, ...defs};
-						},
-					});
-					try {
-						latestJsonRef.current = JSON.parse(initialEditorState);
-					} catch {
-						latestJsonRef.current = null;
-					}
-					setFootnotes(extractedDefs);
-					footnotesRef.current = extractedDefs;
-					const initialSerialized = getInitialSerialized(
-						initialEditorState,
-						extractedDefs,
-					);
-					lastSavedContentRef.current = initialSerialized;
-					const initialCounts = computePlainTextCounts(
-						extractLexicalPlainText(initialSerialized),
-					);
-					setWordCount(initialCounts.wordCount);
-					setTkCount(initialCounts.tkCount);
-
-					saverRef.current = createSaver(site, p.id, p.updated_at, {
-						onStatus: s => {
-							if (mountedRef.current) {
-								setSaveStatus(s);
-							}
-						},
-						onConflict: () => {
-							if (mountedRef.current) {
-								setSaveStatus("conflict");
-							}
-						},
-					});
-					setLoading(false);
+					void cacheDraft(site.base, p).catch(() => {});
+					applyLoadedPost(p);
 				})
-				.catch(err => {
+				.catch(async err => {
 					if (cancelled) return;
+					const cached = await getCachedDraft(site.base, postId).catch(
+						() => null,
+					);
+					if (cancelled) return;
+					if (cached) {
+						const restored = cached.pendingPatch
+							? ({
+									...cached.post,
+									...cached.pendingPatch,
+								} as PostDetail)
+							: cached.post;
+						applyLoadedPost(restored);
+						if (
+							cached.pendingPatch &&
+							Object.keys(cached.pendingPatch).length > 0
+						) {
+							void saverRef.current?.queue(
+								cached.pendingPatch as Record<string, unknown>,
+							);
+						}
+						return;
+					}
 					setError(err instanceof Error ? err.message : String(err));
 					setLoading(false);
 				});
@@ -849,6 +893,82 @@ export default function LexicalLabEditor({
 		}
 	};
 
+	const handleReloadServerVersion = useCallback(async () => {
+		if (!post) return;
+		setActionError(null);
+		try {
+			saverRef.current?.halt();
+			const fresh = await fetchPost(site, post.id);
+			if (!mountedRef.current) return;
+			setPost(fresh);
+			setTitle(fresh.title ?? "");
+			onTitleChangeRef.current?.(fresh.title ?? "");
+			setMeta(metaFromPost(fresh));
+			let extractedDefs: Record<string, string> = {};
+			const initialEditorState = convertInitialEditorState(fresh.lexical, {
+				onExtractFootnotes: defs => {
+					extractedDefs = {...extractedDefs, ...defs};
+				},
+			});
+			try {
+				latestJsonRef.current = JSON.parse(initialEditorState);
+			} catch {
+				latestJsonRef.current = null;
+			}
+			setFootnotes(extractedDefs);
+			footnotesRef.current = extractedDefs;
+			const initialSerialized = getInitialSerialized(
+				initialEditorState,
+				extractedDefs,
+			);
+			lastSavedContentRef.current = initialSerialized;
+			const initialCounts = computePlainTextCounts(
+				extractLexicalPlainText(initialSerialized),
+			);
+			setWordCount(initialCounts.wordCount);
+			setTkCount(initialCounts.tkCount);
+			setEditorVersion(v => v + 1);
+			setSaveStatus("clean");
+			saverRef.current = createSaver(site, fresh.id, fresh.updated_at, {
+				onStatus: s => {
+					if (mountedRef.current) {
+						setSaveStatus(s);
+					}
+				},
+				onConflict: () => {
+					if (mountedRef.current) {
+						setSaveStatus("conflict");
+					}
+				},
+				onOfflineSave: async patch => {
+					await markDraftDirty(site.base, fresh.id, patch);
+				},
+				onSaveSuccess: (updatedAt, patch) => {
+					void markDraftSynced(site.base, fresh.id, updatedAt, patch).catch(
+						() => {},
+					);
+				},
+			});
+			void cacheDraft(site.base, fresh, {dirty: false}).catch(() => {});
+		} catch (err) {
+			setActionError(err instanceof Error ? err.message : String(err));
+		}
+	}, [post, site]);
+
+	const handleOverwriteConflict = useCallback(async () => {
+		if (!post || !saverRef.current) return;
+		setActionError(null);
+		try {
+			const fresh = await fetchPost(site, post.id);
+			await saverRef.current.resumeWithUpdatedAt(fresh.updated_at);
+			if (mountedRef.current && !saverRef.current.conflict) {
+				setSaveStatus("saved");
+			}
+		} catch (err) {
+			setActionError(err instanceof Error ? err.message : String(err));
+		}
+	}, [post, site]);
+
 	const refreshRevisions = useCallback(
 		(targetId: string) => {
 			fetchPost(site, targetId)
@@ -971,6 +1091,111 @@ export default function LexicalLabEditor({
 			window.removeEventListener("geist:save-revision", flushExplicitRevision);
 		};
 	}, [flushExplicitRevision]);
+
+	// Flush pending edits on window close or beforeunload.
+	useEffect(() => {
+		const onBeforeUnload = (e: BeforeUnloadEvent) => {
+			if (scrapId) {
+				const hasPending =
+					Object.keys(pendingPatchRef.current).length > 0 ||
+					saveTimerRef.current !== null;
+				if (hasPending) {
+					void flushSave();
+					e.preventDefault();
+				}
+				return;
+			}
+			const saver = saverRef.current;
+			if (
+				saver &&
+				shouldBlockUnload({
+					hasPending: saver.hasPending,
+					conflict: saver.conflict,
+				}) === "prompt"
+			) {
+				void saver.flush().catch(() => {});
+				e.preventDefault();
+			}
+		};
+		window.addEventListener("beforeunload", onBeforeUnload);
+
+		let unlisten: (() => void) | undefined;
+		let cancelled = false;
+		try {
+			getCurrentWindow()
+				.onCloseRequested(async event => {
+					if (scrapId) {
+						const hasPending =
+							Object.keys(pendingPatchRef.current).length > 0 ||
+							saveTimerRef.current !== null;
+						if (
+							shouldBlockUnload({
+								hasPending,
+								conflict: false,
+							}) === "close"
+						) {
+							return;
+						}
+						event.preventDefault();
+						try {
+							await flushSave();
+							if (
+								canDestroyAfterFlush({
+									hasPending:
+										Object.keys(pendingPatchRef.current).length > 0,
+									conflict: false,
+								})
+							) {
+								await getCurrentWindow().destroy().catch(() => {});
+							}
+						} catch {
+							/* Keep window open if save fails */
+						}
+						return;
+					}
+					const saver = saverRef.current;
+					if (
+						!saver ||
+						shouldBlockUnload({
+							hasPending: saver.hasPending,
+							conflict: saver.conflict,
+						}) === "close"
+					) {
+						return;
+					}
+					event.preventDefault();
+					try {
+						await saver.flush();
+						if (
+							canDestroyAfterFlush({
+								hasPending: saver.hasPending,
+								conflict: saver.conflict,
+							})
+						) {
+							await getCurrentWindow().destroy().catch(() => {});
+						}
+					} catch {
+						/* Keep window open if save fails */
+					}
+				})
+				.then(fn => {
+					if (cancelled) {
+						fn();
+					} else {
+						unlisten = fn;
+					}
+				})
+				.catch(() => {});
+		} catch {
+			/* Tauri window API unavailable outside Tauri runtime */
+		}
+
+		return () => {
+			cancelled = true;
+			unlisten?.();
+			window.removeEventListener("beforeunload", onBeforeUnload);
+		};
+	}, [scrapId, flushSave]);
 
 	const handleInAppPreview = useCallback(async () => {
 		if (!post) {
@@ -1814,6 +2039,36 @@ export default function LexicalLabEditor({
 					data-editor-font={uiPrefs.editorFont}
 					data-typewriter={uiPrefs.typewriterMode ? "on" : undefined}
 				>
+					{saveStatus === "conflict" && (
+						<div
+							className="warn-banner conflict-banner"
+							role="alert"
+							data-testid="conflict-banner"
+						>
+							<span>
+								<strong>Conflict (409)</strong> — someone else saved a newer
+								version of this post. Autosave is paused so nobody&apos;s work is
+								clobbered.
+							</span>
+							<div className="banner-actions">
+								<button
+									type="button"
+									onClick={() => void handleReloadServerVersion()}
+									data-testid="conflict-reload-button"
+								>
+									Reload server version
+								</button>
+								<button
+									type="button"
+									onClick={() => void handleOverwriteConflict()}
+									data-testid="conflict-overwrite-button"
+								>
+									Keep my edits &amp; overwrite
+								</button>
+							</div>
+						</div>
+					)}
+
 					{actionError && (
 						<div
 							className="error-banner"

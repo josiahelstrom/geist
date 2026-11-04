@@ -1161,6 +1161,19 @@ function GhostCardComponent({
 						placeholder="Caption (optional)..."
 						onChange={e => updateField("caption", e.target.value)}
 					/>
+					{!isBookmark && embedHtml.trim() && (
+						<div
+							className="ghost-card-embed-html"
+							data-testid="ghost-card-embed-preview"
+						>
+							<iframe
+								className="ghost-card-embed-iframe"
+								sandbox="allow-scripts allow-same-origin"
+								srcDoc={embedHtml}
+								title="Embed preview"
+							/>
+						</div>
+					)}
 					{url && (
 						<div className="ghost-card-bookmark-card">
 							<div className="ghost-card-bookmark-content">
