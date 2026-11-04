@@ -112,6 +112,21 @@
 	color: var(--fg-muted, #9ca3af);
 }
 
+/* TitleBar already renders post status, save status, revisions, and inspector
+ * controls; keep these nodes in the DOM for App.tsx's MutationObserver/click
+ * forwarding and unit tests while hiding the duplicate inner-header copies. */
+.lexical-lab-header [data-testid="toggle-revisions-button"],
+.lexical-lab-header [data-testid="toggle-sidebar-button"],
+.lexical-lab-header .badge:not(.badge-scrap),
+.lexical-lab-header .lexical-lab-status {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
+	overflow: hidden;
+}
+
 .lexical-lab-tk-badge {
 	display: inline-flex;
 	align-items: center;
@@ -254,6 +269,33 @@ html.dark .lexical-lab-tk-badge,
 
 .lexical-lab-shell.with-sidebar:has(.revisions-drawer) .lexical-lab-word-count.with-sidebar {
 	right: calc(340px + var(--space-5, 20px));
+}
+
+.app-shell[data-focus="on"] .lexical-lab-shell,
+.app-shell[data-focus="on"] .lexical-lab-shell.with-sidebar,
+.app-shell[data-focus="on"] .lexical-lab-shell.with-sidebar:has(.revisions-drawer) {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell[data-focus="on"] .lexical-lab-header {
+	display: none;
+}
+
+.app-shell[data-focus="on"] .lexical-lab-word-count,
+.app-shell[data-focus="on"] .lexical-lab-word-count.with-sidebar,
+.app-shell[data-focus="on"] .lexical-lab-shell.with-sidebar:has(.revisions-drawer) .lexical-lab-word-count.with-sidebar {
+	right: 24px;
+	border-color: transparent;
+	background: transparent;
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+	opacity: 0.4;
+	transition: opacity 200ms ease;
+}
+
+.app-shell[data-focus="on"][data-focus-idle="on"] .lexical-lab-word-count {
+	opacity: 0;
+	pointer-events: none;
 }
 
 .lexical-lab-icon-button {

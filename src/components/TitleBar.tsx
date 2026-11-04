@@ -17,6 +17,8 @@ export type TitleBarProps = {
 	saveStatus?: SaveStatus | null;
 	sidebarOpen?: boolean;
 	inspectorOpen?: boolean;
+	showSidebarToggle?: boolean;
+	showInspectorToggle?: boolean;
 	onToggleSidebar?: () => void;
 	onCycleTheme?: () => void;
 	onRefresh?: () => void;
@@ -138,6 +140,8 @@ export default function TitleBar({
 	saveStatus,
 	sidebarOpen = true,
 	inspectorOpen = false,
+	showSidebarToggle = true,
+	showInspectorToggle = true,
 	onToggleSidebar,
 	onCycleTheme,
 	onRefresh,
@@ -194,6 +198,22 @@ export default function TitleBar({
 			{/* 78 x 52 reservation under the macOS traffic lights. */}
 			<div className="traffic-light-gutter" aria-hidden="true" />
 
+			{showSidebarToggle && (
+				<div className="titlebar-left-actions glass-pill titlebar-no-drag">
+					<button
+						type="button"
+						className="titlebar-button titlebar-no-drag"
+						onClick={onToggleSidebar}
+						title="Toggle sidebar (⌘\\)"
+						aria-label="Toggle sidebar"
+						aria-pressed={sidebarOpen}
+						data-testid="titlebar-sidebar-toggle"
+					>
+						<SidebarIcon />
+					</button>
+				</div>
+			)}
+
 			<div className="titlebar-identity" data-tauri-drag-region>
 				<span
 					className={
@@ -238,17 +258,6 @@ export default function TitleBar({
 				<button
 					type="button"
 					className="titlebar-button titlebar-no-drag"
-					onClick={onToggleSidebar}
-					title="Toggle sidebar (⌘\\)"
-					aria-label="Toggle sidebar"
-					aria-pressed={sidebarOpen}
-					data-testid="titlebar-sidebar-toggle"
-				>
-					<SidebarIcon />
-				</button>
-				<button
-					type="button"
-					className="titlebar-button titlebar-no-drag"
 					onClick={cycleAppearance}
 					title={`Cycle appearance: ${themeLabel} (⌘⇧L)`}
 					aria-label={`Cycle appearance. Current: ${themeLabel}`}
@@ -266,27 +275,31 @@ export default function TitleBar({
 				>
 					<SyncIcon />
 				</button>
-				<button
-					type="button"
-					className="titlebar-button titlebar-no-drag"
-					onClick={onOpenRevisions}
-					title="Post history"
-					aria-label="Open post history"
-					data-testid="titlebar-revisions"
-				>
-					<HistoryIcon />
-				</button>
-				<button
-					type="button"
-					className="titlebar-button titlebar-no-drag"
-					onClick={onToggleInspector}
-					title="Post settings (⌘⌥I)"
-					aria-label="Toggle post settings inspector"
-					aria-pressed={inspectorOpen}
-					data-testid="titlebar-inspector-toggle"
-				>
-					<InspectorIcon />
-				</button>
+				{showInspectorToggle && (
+					<>
+						<button
+							type="button"
+							className="titlebar-button titlebar-no-drag"
+							onClick={onOpenRevisions}
+							title="Post history"
+							aria-label="Open post history"
+							data-testid="titlebar-revisions"
+						>
+							<HistoryIcon />
+						</button>
+						<button
+							type="button"
+							className="titlebar-button titlebar-no-drag"
+							onClick={onToggleInspector}
+							title="Post settings (⌘⌥I)"
+							aria-label="Toggle post settings inspector"
+							aria-pressed={inspectorOpen}
+							data-testid="titlebar-inspector-toggle"
+						>
+							<InspectorIcon />
+						</button>
+					</>
+				)}
 			</div>
 		</header>
 	);

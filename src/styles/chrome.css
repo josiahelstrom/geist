@@ -209,6 +209,21 @@
 	backdrop-filter: var(--glass-blur);
 }
 
+.titlebar-left-actions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex: none;
+	height: var(--control-height);
+	padding: 0 var(--space-1);
+	margin-right: 10px;
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-pill);
+	box-shadow: var(--shadow-card);
+	pointer-events: auto;
+	-webkit-app-region: no-drag;
+}
+
 .titlebar-actions {
 	display: flex;
 	align-items: center;
@@ -451,6 +466,7 @@
 	border: none;
 }
 
+.app-shell[data-focus="on"] .titlebar-left-actions,
 .app-shell[data-focus="on"] .titlebar-identity,
 .app-shell[data-focus="on"] .titlebar-actions,
 .app-shell[data-focus="on"] .update-banner {

@@ -147,6 +147,22 @@
 	color: var(--fg-tertiary);
 }
 
+/* TitleBar already renders post status, save status, revisions, and inspector
+ * controls; keep these nodes in the DOM for App.tsx's MutationObserver/click
+ * forwarding and unit tests while hiding the duplicate inner-header copies. */
+.editor-header [data-testid="toggle-revisions-button"],
+.editor-header [data-testid="toggle-sidebar-button"],
+.editor-header .badge:not(.badge-scrap),
+.editor-header .editor-breadcrumb-sep,
+.editor-header [data-testid="save-status"] {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
+	overflow: hidden;
+}
+
 .editor-scheduled-hint {
 	overflow: hidden;
 	color: var(--fg-muted);

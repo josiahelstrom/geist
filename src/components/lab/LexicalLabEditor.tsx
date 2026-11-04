@@ -412,13 +412,20 @@ function SidebarIcon() {
 	);
 }
 
+function cleanFeatureImageCaption(caption: string | null | undefined): string {
+	return (caption ?? "").replace(
+		/^<span\s+style="white-space:\s*pre-wrap;?">([\s\S]*?)<\/span>$/i,
+		"$1",
+	);
+}
+
 function metaFromPost(p: PostDetail): PostMetadataState {
 	return {
 		slug: p.slug ?? "",
 		customExcerpt: p.custom_excerpt ?? "",
 		featureImage: p.feature_image ?? "",
 		featureImageAlt: p.feature_image_alt ?? "",
-		featureImageCaption: p.feature_image_caption ?? "",
+		featureImageCaption: cleanFeatureImageCaption(p.feature_image_caption),
 		featured: Boolean(p.featured),
 		visibility: p.visibility ?? "public",
 		tiers: (p.tiers ?? []).filter(t => t.type === "paid"),
@@ -1002,7 +1009,9 @@ export default function LexicalLabEditor({
 				customExcerpt: patch.custom_excerpt ?? "",
 				featureImage: patch.feature_image ?? "",
 				featureImageAlt: patch.feature_image_alt ?? "",
-				featureImageCaption: patch.feature_image_caption ?? "",
+				featureImageCaption: cleanFeatureImageCaption(
+					patch.feature_image_caption,
+				),
 			}));
 
 			let extractedDefs: Record<string, string> = {};
@@ -1733,7 +1742,7 @@ export default function LexicalLabEditor({
 		return (
 			<div className="lexical-lab-shell">
 				<div className="lexical-lab-main-area">
-					<header className="lexical-lab-header">
+					<header className="editor-header lexical-lab-header">
 						<div className="lexical-lab-topbar-left">
 							{onBack && (
 								<button
@@ -1768,7 +1777,7 @@ export default function LexicalLabEditor({
 		return (
 			<div className="lexical-lab-shell">
 				<div className="lexical-lab-main-area">
-					<header className="lexical-lab-header">
+					<header className="editor-header lexical-lab-header">
 						<div className="lexical-lab-topbar-left">
 							{onBack && (
 								<button
@@ -1817,7 +1826,7 @@ export default function LexicalLabEditor({
 			}
 		>
 			<div className="lexical-lab-main-area">
-				<header className="lexical-lab-header">
+				<header className="editor-header lexical-lab-header">
 					<div className="lexical-lab-topbar-left">
 						{onBack && (
 							<button

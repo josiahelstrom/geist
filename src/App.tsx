@@ -607,19 +607,20 @@ export default function App() {
 		};
 	}, [route]);
 
+	const inPostEditor = route.name === "editor";
+	const inScrapEditor =
+		route.name === "scrap-editor" || (route.name as string) === "scrap";
+	const inEditor = inPostEditor || inScrapEditor;
+
 	const titleBar = (
 		<TitleBar
 			postTitle={activePost?.title ?? (activeScrapId ? "Scrap" : null)}
 			postStatus={activePost?.status ?? null}
-			saveStatus={
-				route.name === "editor" ||
-				route.name === "scrap-editor" ||
-				(route.name as string) === "scrap"
-					? saveStatus
-					: null
-			}
+			saveStatus={inEditor ? saveStatus : null}
 			sidebarOpen={sidebarOpen}
 			inspectorOpen={inspectorOpen}
+			showSidebarToggle={route.name === "list"}
+			showInspectorToggle={inPostEditor}
 			onToggleSidebar={toggleSidebar}
 			onCycleTheme={cycleTheme}
 			onRefresh={refreshPosts}

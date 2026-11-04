@@ -651,7 +651,8 @@ describe("LexicalLabEditor", () => {
 			...draftPost(),
 			feature_image: "https://example.com/hero.jpg",
 			feature_image_alt: "Hero image",
-			feature_image_caption: "Caption text",
+			feature_image_caption:
+				'<span style="white-space: pre-wrap;">Caption text</span>',
 		};
 		vi.mocked(fetchPost).mockResolvedValue(post);
 
