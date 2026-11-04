@@ -67,11 +67,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -84,10 +88,10 @@ jobs:
           workspaces: src-tauri -> target
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Check frontend
-        run: npm run check
+        run: pnpm check
 
       # Only export the Apple signing vars into $GITHUB_ENV when the certificate
       # secret actually exists. If unset, Tauri CLI cleanly skips signing and

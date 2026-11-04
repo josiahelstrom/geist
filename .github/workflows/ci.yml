@@ -16,17 +16,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck and test
-        run: npm run check
+        run: pnpm check
 
   rust:
     name: Rust
@@ -36,17 +40,21 @@ jobs:
 
       # `tauri::generate_context!` reads `frontendDist` (`../dist`) at compile
       # time, so the frontend has to exist before cargo builds the crate.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build frontend
-        run: npm run build
+        run: pnpm build
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Dev launcher for Geist.
 #
-# Why this exists instead of `npm run tauri dev`:
+# Why this exists instead of `pnpm tauri dev`:
 # tauri-cli always ad-hoc signs the debug binary, and macOS binds Keychain
 # access to an ad-hoc signature's cdhash -- which changes on every rebuild. The
 # result is a "wants to use your confidential information" prompt every time
@@ -35,7 +35,7 @@ if lsof -ti:1420 >/dev/null 2>&1; then
 fi
 
 echo "==> starting vite"
-npm run dev &
+pnpm dev &
 VITE_PID=$!
 
 for _ in $(seq 1 60); do
