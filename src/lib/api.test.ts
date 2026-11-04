@@ -56,8 +56,8 @@ import {
 } from "./api";
 
 const SITE: Site = {
-	base: "https://everywayhuman.com",
-	siteUrl: "https://everywayhuman.com/",
+	base: "https://example.com",
+	siteUrl: "https://example.com/",
 	title: "every way human",
 	version: "6.68",
 	keyKind: "staff",
@@ -116,7 +116,7 @@ describe("api", () => {
 	it("builds the admin URL from the stored base", async () => {
 		await api(SITE, "/posts/?limit=5");
 		expect(fetchCalls[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/posts/?limit=5",
+			"https://example.com/ghost/api/admin/posts/?limit=5",
 		);
 	});
 
@@ -181,7 +181,7 @@ describe("fetchers", () => {
 		const post = await fetchPost(SITE, "p1");
 		expect(post.id).toBe("p1");
 		expect(fetchCalls[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/posts/p1/?formats=lexical&include=tags,authors,tiers,newsletter,post_revisions,post_revisions.author",
+			"https://example.com/ghost/api/admin/posts/p1/?formats=lexical&include=tags,authors,tiers,newsletter,post_revisions,post_revisions.author",
 		);
 		expect(fetchCalls[0].init.method).toBeUndefined();
 	});
@@ -196,7 +196,7 @@ describe("fetchers", () => {
 		});
 		const tiers = await listSiteTiers(SITE);
 		expect(fetchCalls[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/tiers/?limit=all",
+			"https://example.com/ghost/api/admin/tiers/?limit=all",
 		);
 		expect(tiers).toEqual([
 			{id: "t2", name: "Gold", slug: "gold", type: "paid", active: true},
@@ -224,7 +224,7 @@ describe("fetchers", () => {
 		});
 		const newsletters = await listActiveNewsletters(SITE);
 		expect(fetchCalls[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/newsletters/?filter=status:active&include=count.active_members&limit=all",
+			"https://example.com/ghost/api/admin/newsletters/?filter=status:active&include=count.active_members&limit=all",
 		);
 		expect(newsletters[0].count?.active_members).toBe(42);
 	});
@@ -245,14 +245,14 @@ describe("connect", () => {
 		return {
 			ok: true,
 			status: 200,
-			url: "https://everywayhuman.com/ghost/api/admin/site/",
+			url: "https://example.com/ghost/api/admin/site/",
 			headers: new Headers({
 				date: new Date(Date.now() + 60_000).toUTCString(),
 			}),
 			json: async () => ({
 				site: {
 					title: "every way human",
-					url: "https://everywayhuman.com/",
+					url: "https://example.com/",
 					version: "6.68",
 				},
 			}),
@@ -268,17 +268,17 @@ describe("connect", () => {
 	});
 
 	it("stores the key and resolves the admin base", async () => {
-		const site = await connect("everywayhuman.com", "abc:deadbeef");
+		const site = await connect("example.com", "abc:deadbeef");
 		expect(fetchCalls[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/site/",
+			"https://example.com/ghost/api/admin/site/",
 		);
 		expect(calls.map(c => c.cmd)).toContain("save_key");
-		expect(site.base).toBe("https://everywayhuman.com");
+		expect(site.base).toBe("https://example.com");
 		expect(site.version).toBe("6.68");
 	});
 
 	it("measures clock skew from the Date header", async () => {
-		const site = await connect("everywayhuman.com", "abc:deadbeef");
+		const site = await connect("example.com", "abc:deadbeef");
 		// The stubbed Date header is 60s in the future.
 		expect(site.clockOffset).toBeGreaterThanOrEqual(55);
 		expect(site.clockOffset).toBeLessThanOrEqual(65);
@@ -288,7 +288,7 @@ describe("connect", () => {
 		currentResponse = jsonResponse(200, {
 			users: [{name: "Josiah", roles: [{name: "Owner"}]}],
 		});
-		const site = await connect("everywayhuman.com", "abc:deadbeef");
+		const site = await connect("example.com", "abc:deadbeef");
 		expect(site.keyKind).toBe("staff");
 		expect(site.role).toBe("Owner");
 	});
@@ -297,7 +297,7 @@ describe("connect", () => {
 		currentResponse = jsonResponse(404, {
 			errors: [{code: "NOT_FOUND", message: "not found"}],
 		});
-		const site = await connect("everywayhuman.com", "abc:deadbeef");
+		const site = await connect("example.com", "abc:deadbeef");
 		expect(site.keyKind).toBe("integration");
 		expect(site.role).toBeUndefined();
 	});
@@ -306,7 +306,7 @@ describe("connect", () => {
 		currentResponse = jsonResponse(401, {
 			errors: [{code: "INVALID_JWT", message: "Invalid token"}],
 		});
-		await expect(connect("everywayhuman.com", "abc:dead")).rejects.toThrow(
+		await expect(connect("example.com", "abc:dead")).rejects.toThrow(
 			"Invalid token",
 		);
 		expect(calls.map(c => c.cmd)).toContain("delete_key");
@@ -328,7 +328,7 @@ describe("password auth commands", () => {
 			staff_id: "staff-1",
 		};
 		const result = await loginWithPassword(
-			"https://everywayhuman.com",
+			"https://example.com",
 			"josiah@example.com",
 			"hunter2",
 		);
@@ -341,7 +341,7 @@ describe("password auth commands", () => {
 			{
 				cmd: "login_with_password",
 				args: {
-					url: "https://everywayhuman.com",
+					url: "https://example.com",
 					email: "josiah@example.com",
 					password: "hunter2",
 				},
@@ -357,7 +357,7 @@ describe("password auth commands", () => {
 			message: "We emailed a verification code.",
 		};
 		const result = await loginWithPassword(
-			"everywayhuman.com",
+			"example.com",
 			"josiah@example.com",
 			"hunter2",
 		);
@@ -389,11 +389,11 @@ describe("password auth commands", () => {
 	it("rotateStaffToken returns the new token id", async () => {
 		invokeResult = "staff-2";
 		await expect(
-			rotateStaffToken("https://everywayhuman.com", 42),
+			rotateStaffToken("https://example.com", 42),
 		).resolves.toBe("staff-2");
 		expect(calls[0]).toEqual({
 			cmd: "rotate_staff_token",
-			args: {base: "https://everywayhuman.com", clockOffset: 42},
+			args: {base: "https://example.com", clockOffset: 42},
 		});
 	});
 });
@@ -403,14 +403,14 @@ describe("fetchSite", () => {
 		probeResponse = {
 			ok: true,
 			status: 200,
-			url: "https://everywayhuman.com/ghost/api/admin/site/",
+			url: "https://example.com/ghost/api/admin/site/",
 			headers: new Headers({
 				date: new Date(Date.now() + 60_000).toUTCString(),
 			}),
 			json: async () => ({
 				site: {
 					title: "every way human",
-					url: "https://everywayhuman.com/",
+					url: "https://example.com/",
 					version: "6.68",
 				},
 			}),
@@ -422,10 +422,10 @@ describe("fetchSite", () => {
 
 	it("resolves site metadata without saving a key", async () => {
 		const site = await fetchSite({
-			url: "everywayhuman.com",
+			url: "example.com",
 			keyKind: "staff",
 		});
-		expect(site.base).toBe("https://everywayhuman.com");
+		expect(site.base).toBe("https://example.com");
 		expect(site.title).toBe("every way human");
 		expect(site.version).toBe("6.68");
 		expect(site.keyKind).toBe("staff");
@@ -436,7 +436,7 @@ describe("fetchSite", () => {
 	it("honors explicit title and role overrides without probing /users/me/", async () => {
 		const site = await fetchSite({
 			title: "My publication",
-			url: "everywayhuman.com",
+			url: "example.com",
 			role: "Editor",
 			keyKind: "staff",
 		});
@@ -449,8 +449,8 @@ describe("fetchSite", () => {
 		currentResponse = jsonResponse(403, {
 			errors: [{code: "NO_PERMISSION", message: "nope"}],
 		});
-		const site = await fetchSite({url: "everywayhuman.com"});
-		expect(site.base).toBe("https://everywayhuman.com");
+		const site = await fetchSite({url: "example.com"});
+		expect(site.base).toBe("https://example.com");
 		expect(site.role).toBeUndefined();
 	});
 });

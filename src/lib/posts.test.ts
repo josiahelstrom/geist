@@ -54,8 +54,8 @@ const {
 } = await import("./posts");
 
 const SITE: Site = {
-	base: "https://everywayhuman.com",
-	siteUrl: "https://everywayhuman.com/",
+	base: "https://example.com",
+	siteUrl: "https://example.com/",
 	title: "every way human",
 	version: "6.68",
 	keyKind: "staff",
@@ -73,7 +73,7 @@ describe("publish safety (rule 4.2)", () => {
 		await setPostStatus(SITE, "p1", "T1", "published");
 
 		expect(requests[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/posts/p1/",
+			"https://example.com/ghost/api/admin/posts/p1/",
 		);
 		expect(requests[0].url).not.toContain("newsletter");
 		expect(requests[0].url).not.toContain("email_segment");
@@ -200,7 +200,7 @@ describe("newsletter publish, scheduling & visibility (v0.4)", () => {
 		});
 		expect(requests[0].init.method).toBe("PUT");
 		expect(requests[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/posts/p1/?newsletter=weekly&email_segment=status%3Afree",
+			"https://example.com/ghost/api/admin/posts/p1/?newsletter=weekly&email_segment=status%3Afree",
 		);
 		expect(body().posts).toEqual([
 			{status: "published", updated_at: "T1"},
@@ -217,7 +217,7 @@ describe("newsletter publish, scheduling & visibility (v0.4)", () => {
 			confirmedRecipientCount: 0,
 		});
 		expect(requests[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/posts/p2/?newsletter=weekly",
+			"https://example.com/ghost/api/admin/posts/p2/?newsletter=weekly",
 		);
 		expect(body().posts).toEqual([
 			{status: "published", email_only: true, updated_at: "T1"},
@@ -257,7 +257,7 @@ describe("newsletter publish, scheduling & visibility (v0.4)", () => {
 		});
 		expect(requests[0].init.method).toBe("PUT");
 		expect(requests[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/posts/p1/?newsletter=weekly&email_segment=status%3A-free",
+			"https://example.com/ghost/api/admin/posts/p1/?newsletter=weekly&email_segment=status%3A-free",
 		);
 		expect(body().posts).toEqual([
 			{
@@ -311,7 +311,7 @@ describe("newsletter publish, scheduling & visibility (v0.4)", () => {
 		const result = await unschedulePost(SITE, "p1", "T1");
 		expect(requests[0].init.method).toBe("PUT");
 		expect(requests[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/posts/p1/",
+			"https://example.com/ghost/api/admin/posts/p1/",
 		);
 		expect(body().posts).toEqual([
 			{
@@ -359,7 +359,7 @@ describe("createDraft & deletePost", () => {
 		await deletePost(SITE, "post-99");
 		expect(requests[0].init.method).toBe("DELETE");
 		expect(requests[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/posts/post-99/",
+			"https://example.com/ghost/api/admin/posts/post-99/",
 		);
 		responder = () => ({posts: [{status: "published", updated_at: "T2"}]});
 	});
@@ -367,8 +367,8 @@ describe("createDraft & deletePost", () => {
 
 describe("previewUrl & openInAppPreview (plan §9 & §12)", () => {
 	it("builds the draft preview path", () => {
-		expect(previewUrl("https://everywayhuman.com/", "uuid-1")).toBe(
-			"https://everywayhuman.com/p/uuid-1/",
+		expect(previewUrl("https://example.com/", "uuid-1")).toBe(
+			"https://example.com/p/uuid-1/",
 		);
 	});
 
@@ -379,21 +379,21 @@ describe("previewUrl & openInAppPreview (plan §9 & §12)", () => {
 	});
 
 	it("supports ?member_status=free|paid|anonymous toggles", () => {
-		expect(previewUrl("https://everywayhuman.com/", "u1", "free")).toBe(
-			"https://everywayhuman.com/p/u1/?member_status=free",
+		expect(previewUrl("https://example.com/", "u1", "free")).toBe(
+			"https://example.com/p/u1/?member_status=free",
 		);
-		expect(previewUrl("https://everywayhuman.com/", "u1", "paid")).toBe(
-			"https://everywayhuman.com/p/u1/?member_status=paid",
+		expect(previewUrl("https://example.com/", "u1", "paid")).toBe(
+			"https://example.com/p/u1/?member_status=paid",
 		);
-		expect(previewUrl("https://everywayhuman.com/", "u1", "anonymous")).toBe(
-			"https://everywayhuman.com/p/u1/?member_status=anonymous",
+		expect(previewUrl("https://example.com/", "u1", "anonymous")).toBe(
+			"https://example.com/p/u1/?member_status=anonymous",
 		);
 	});
 
 	it("opens the isolated preview WebviewWindow via Rust command", async () => {
 		invoked.length = 0;
 		await openInAppPreview(
-			"https://everywayhuman.com/",
+			"https://example.com/",
 			"uuid-42",
 			"My Post",
 			"paid",
@@ -401,7 +401,7 @@ describe("previewUrl & openInAppPreview (plan §9 & §12)", () => {
 		expect(invoked).toContainEqual({
 			cmd: "open_preview_window",
 			args: {
-				url: "https://everywayhuman.com/p/uuid-42/?member_status=paid",
+				url: "https://example.com/p/uuid-42/?member_status=paid",
 				title: "My Post",
 			},
 		});

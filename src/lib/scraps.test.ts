@@ -81,8 +81,8 @@ const SITE = "https://example.com";
 const OTHER_SITE = "https://other.example.com";
 
 const GHOST_SITE: Site = {
-	base: "https://everywayhuman.com",
-	siteUrl: "https://everywayhuman.com/",
+	base: "https://example.com",
+	siteUrl: "https://example.com/",
 	title: "every way human",
 	version: "6.68",
 	keyKind: "staff",
@@ -349,7 +349,7 @@ describe("promoteScrapToDraft", () => {
 		);
 		expect(createRequest).toBeDefined();
 		expect(createRequest?.url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/posts/?formats=lexical",
+			"https://example.com/ghost/api/admin/posts/?formats=lexical",
 		);
 		expect(requestBody(createRequest!)).toEqual({
 			posts: [
@@ -497,7 +497,7 @@ describe("demoteDraftToScrap", () => {
 		expect(mockState.requests).toHaveLength(1);
 		expect(mockState.requests[0].init.method).toBe("DELETE");
 		expect(mockState.requests[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/posts/post-7/",
+			"https://example.com/ghost/api/admin/posts/post-7/",
 		);
 	});
 

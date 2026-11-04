@@ -1,11 +1,9 @@
 # Geist — Architecture
 
-The living technical reference for how Geist is built and operates at 1.0.x. Geist is a native
-macOS desktop editor (with Windows support via WebView2) for Ghost publications, providing
-offline draft caching, private local scratchpads, Koenig editor parity, secure Keychain-backed
-authentication, and in-app auto-updates. The full historical design record — weekend build plan,
-verified Ghost behaviours, corrections found while building — is preserved at
-[`docs/ghost-desktop-editor.md`](./ghost-desktop-editor.md).
+The living technical reference for how Geist is built and operates at `0.2.1`. Geist is a native
+macOS desktop editor (with Windows support via WebView2) for Ghost publications, providing a
+Markdown-first Lexical writing experience with 100% lossless Ghost card parity, offline draft
+caching, private local scratchpads, secure Keychain-backed authentication, and in-app auto-updates.
 
 ---
 
@@ -16,14 +14,16 @@ verified Ghost behaviours, corrections found while building — is preserved at
 | | |
 |---|---|
 | App / product name | Geist |
+| Version | `0.2.1` |
 | Bundle ID | `app.geist.desktop` |
 | Platform | macOS (native Tauri v2 shell); Windows build via WebView2 |
 | Supported Ghost | 5.0 – 6.73 |
-| Editor | `@tryghost/koenig-lexical` (pinned 1.13.1) |
+| Default Editor Engine | Markdown-first Lexical (`src/components/lab/LexicalLabEditor.tsx`, Lexical 0.53) |
+| Fallback Editor Engine | `@tryghost/koenig-lexical` (pinned 1.13.1, instant toggle via `⌥⌘E`) |
 | No Ghost branding | Ghost is a trademark; never place it in the name, icon or bundle id |
 
 Geist talks to any Ghost site — self-hosted, Ghost(Pro), or OCI-hosted — through the Admin
-API using a Staff Access Token or a Custom Integration key.
+API using email/password login, a Staff Access Token, or a Custom Integration key.
 
 ---
 
@@ -64,8 +64,8 @@ cannot be undone; treat the default as irreversible-action protection.
 
 ### Rule 4 — Ghost version compatibility policy
 
-`MIN_GHOST = 5.0`, `MAX_GHOST = 6.73` (`src/lib/version.ts`), matched to the bundled
-Koenig build.
+`MIN_GHOST = 5.0`, `MAX_GHOST = 6.73` (`src/lib/version.ts`), matched to the supported
+Ghost Lexical schema and bundled Koenig build.
 
 | Site version | Behaviour |
 |---|---|
@@ -87,12 +87,46 @@ React 18.3 + TypeScript + Vite, rendered inside the Tauri webview.
 
 | Area | Location |
 |---|---|
-| Editor canvas | `@tryghost/koenig-lexical` 1.13.1 (`KoenigComposer` / `KoenigEditor`) |
-| App shell | `src/App.tsx`, `src/components/TitleBar.tsx`, `NavigationRail.tsx`, `PostList.tsx` |
+| Primary editor (default) | `src/components/lab/LexicalLabEditor.tsx` (Markdown-first Lexical 0.53 engine) |
+| Ghost card parity & nodes | `src/components/lab/nodes/GhostCardNode.tsx`, `FootnoteReferenceNode.tsx`, `ExtendedRichTextNodes.ts` |
+| Editor plugins | `SlashMenuPlugin.tsx`, `SmartLinkPlugin.tsx`, `MediaDropPastePlugin.tsx`, `FloatingFormatToolbarPlugin.tsx`, `SmartTypographyPlugin.tsx`, `TKIndicatorPlugin.tsx` |
+| Footnote serializer | `src/lib/footnoteSerializer.ts` (`[^1]` inline references ↔ Ghost `<sup class="footnote-ref">` & `<section class="footnotes">`) |
+| Fallback Koenig canvas | `@tryghost/koenig-lexical` 1.13.1 (`KoenigComposer` / `KoenigEditor`, toggled via `⌥⌘E`) |
+| App shell | `src/App.tsx`, `src/components/TitleBar.tsx`, `NavigationRail.tsx`, `PostList.tsx`, `Editor.tsx` |
 | Metadata inspector | `src/components/MetadataSidebar.tsx` |
 | Publishing | `src/components/PublishModal.tsx`, `src/lib/posts.ts` |
 | Revisions | `src/components/RevisionsDrawer.tsx`, `src/lib/revisions.ts` |
-| API / saver | `src/lib/api.ts`, `src/lib/version.ts`, `src/lib/cardConfig.ts`, `src/lib/uploader.ts` |
+| API / saver / cache | `src/lib/api.ts`, `src/lib/saver.ts`, `src/lib/draftCache.ts`, `src/lib/scraps.ts`, `src/lib/version.ts`, `src/lib/cardConfig.ts`, `src/lib/uploader.ts` |
+
+#### Editor Engine (`LexicalLabEditor.tsx` + Koenig Fallback)
+
+Geist `0.2.1` uses the **Markdown-first Lexical editor** (`src/components/lab/LexicalLabEditor.tsx`)
+as its primary default writing engine, with instant, zero-loss switching (`⌥⌘E`) to Ghost's stock
+`@tryghost/koenig-lexical` editor whenever desired:
+
+- **100% Lossless 22-Card Koenig Parity (`GhostCardNode`)**: Preserves every native Ghost Lexical
+  card type (`image`, `gallery`, `bookmark`, `callout`, `toggle`, `button`, `signup`,
+  `call-to-action`, `paywall`, `audio`, `video`, `file`, `product`, `header`, `html`, `markdown`,
+  `codeblock`, `embed`, `horizontalrule`, `email`, `email-cta`) and round-trips every Ghost
+  `extended-text`, `extended-heading`, and `extended-quote` node without dropping attributes.
+- **Slash Menu (`SlashMenuPlugin`)**: Typing `/` at the start of a line opens a keyboard-navigable
+  fuzzy command menu for inserting any of the 22 Ghost cards or structural blocks.
+- **Inline `[^1]` Footnotes (`FootnoteReferenceNode` + `footnoteSerializer`)**: Writers insert
+  footnotes with `[^1]` syntax and edit rich footnote definitions in a dedicated bottom drawer.
+  On save, `footnoteSerializer` compiles them to Ghost-compatible `<sup class="footnote-ref">`
+  HTML nodes and a trailing `<section class="footnotes">` HTML card, and rehydrates them back into
+  editable `FootnoteReferenceNode`s on load.
+- **Smart Internal & External Linking (`SmartLinkPlugin`)**: Pasting a URL over selected text
+  immediately creates a link; pressing `⌘K` or typing `[[` opens a post search popover to link
+  directly to existing posts on the connected Ghost site.
+- **Drag-and-Drop & Clipboard Media (`MediaDropPastePlugin`)**: Dropping or pasting image, audio,
+  video, or attachment files uploads them to Ghost and inserts the corresponding native Ghost card.
+- **Markdown Shortcuts, Smart Typography & `TK` Badges**: Live Markdown shortcuts (`#`, `>`, lists,
+  `` `code` ``, `==highlight==`), typographic replacements (`—`, `–`, `…`), and `TK` "To-Come"
+  margin badges.
+- **Focus Mode & Typewriter Scrolling**: Focus mode (`⇧⌘F`) dims inactive paragraphs to keep
+  attention on the active block (`data-focus-active="true"`) while Typewriter mode keeps the active
+  line vertically centered.
 
 **Design system — CSS tokens.** All visual styling flows from `src/styles/tokens.css`
 (colour, spacing, radius, type, elevation, motion), consumed in cascade order by:
@@ -115,9 +149,10 @@ Business logic and API endpoints stay in TypeScript.
 |---|---|
 | Keychain storage | `keyring` v4 (`apple-native-keyring-store`), service `app.geist`; read-path migration from legacy `app.draftdesk` |
 | Token minting | `mint()` — HMAC-SHA256, `kid` = key id, `aud` = `/admin/`, 300 s TTL, hex-decoded secret, server-clock offset applied |
-| Commands | `save_key`, `delete_key`, `has_key`, `get_jwt`, `open_preview_window` |
+| Staff password auth | Ephemeral in-memory session (`login_with_password`, `verify_2fa_code`, `resend_2fa_code`, `rotate_staff_token`) that exchanges email/password + 2FA for a Staff Access Token and immediately drops the session |
+| Commands | `save_key`, `delete_key`, `has_key`, `get_jwt`, `login_with_password`, `verify_2fa_code`, `resend_2fa_code`, `rotate_staff_token`, `open_preview_window` |
 | Network | `tauri-plugin-http` (requests run in Rust, so CORS does not apply); `tauri-plugin-opener` for browser fallback |
-| Persistence | `tauri-plugin-store` for non-secret site metadata (`geist-sites.json`) |
+| Persistence | `tauri-plugin-store` for non-secret site metadata (`geist-sites.json`), local scraps (`scraps.json`), and offline draft cache (`draft_cache.json`) |
 | macOS shell | Overlay titlebar (`titleBarStyle: "Overlay"`, hidden title, transparent) with sidebar vibrancy |
 | Menu bridge | Native macOS menu bar built in Rust; custom item ids are emitted to the webview as the `geist:menu` event |
 
@@ -125,19 +160,20 @@ Business logic and API endpoints stay in TypeScript.
 
 | Command | Covers |
 |---|---|
-| `npm run check` | `tsc --noEmit` + Vitest |
-| `npm run test:rust` | keyring round-trip, HTTP scope, JWT minting, preview URL validation |
+| `pnpm check` | `tsc --noEmit` + Vitest |
+| `pnpm test:rust` | keyring round-trip, HTTP scope, JWT minting, preview URL validation, session auth helpers |
 | `cargo test --test e2e_admin` | keychain → mint → live Ghost request (env-provided credentials) |
 
-Use `npm run app` (`scripts/dev.sh`), **not** `npm run tauri dev` — ad-hoc signing changes
-the cdhash on every rebuild and breaks the Keychain ACL.
+Use `pnpm app` (`scripts/dev.sh`) on macOS when `GEIST_SIGN_IDENTITY` is set to an Apple
+Development certificate so Keychain ACLs remain stable across Rust rebuilds, or `pnpm tauri dev`
+for standard development.
 
 ### Distribution & updates
 
 | Concern | Implementation |
 |---|---|
 | macOS signing | Developer ID Application certificate when `APPLE_*` secrets are provisioned; otherwise ad-hoc (`signingIdentity: "-"`); hardened runtime |
-| Notarization | Apple notary service via `APPLE_ID` / `APPLE_PASSWORD` (app-specific) / `APPLE_TEAM_ID`; not yet active — rc builds ship ad-hoc signed and un-notarized |
+| Notarization | Apple notary service via `APPLE_ID` / `APPLE_PASSWORD` (app-specific) / `APPLE_TEAM_ID`; builds without secrets ship ad-hoc signed and un-notarized |
 | Updater archive | `bundle.createUpdaterArtifacts` produces `Geist.app.tar.gz` plus a detached `.sig` |
 | Update client | `tauri-plugin-updater` checks, downloads and verifies; `tauri-plugin-process` restarts |
 | Manifest | `latest.json` merged per platform and uploaded to the GitHub Release by `tauri-action` |
@@ -145,31 +181,10 @@ the cdhash on every rebuild and breaks the Keychain ACL.
 | Trust anchor | `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`; private key lives outside the repo |
 
 `latest.json` is only served once a release is published — drafts are invisible to the
-updater endpoint. The workflow sets `prerelease: false`: GitHub's `releases/latest`
-excludes prereleases, so RC and GA both publish as regular releases, gated by draft
-status.
+updater endpoint. The workflow sets `prerelease: false` so GitHub's `releases/latest`
+serves the latest published release.
 The updater private key is never in the repository or the build output; it exists only
 as the `TAURI_SIGNING_PRIVATE_KEY` secret and in the maintainer's password manager.
-
----
-
-## Roadmap (Internal Planning)
-
-*Note: This roadmap is internal planning context maintained for contributors and does not represent a delivery commitment.*
-
-### Now
-- **Public 1.1.0 release polish** — Complete documentation, release validation, and packaging verification for the broad public release.
-
-### Next
-- **Windows CI** — The Windows target is in the release matrix but never built or tested in CI.
-- **CSS consolidation** — Migrate the legacy 861-line `src/App.css` into `src/styles/` and remove the doubled `.class.class` selectors.
-- **Header bar consolidation** — Consolidate the two stacked 52px header bars into floating canvas pills.
-- **Canvas layout stability** — Stop the canvas shifting ~160px when the inspector opens at 1440px.
-- **Expand component test coverage** — Expand component test coverage beyond `PublishModal`.
-
-### Later
-- **Markdown-adjacent footnote syntax (`[^1]`)** — Syntax that serializes to Ghost's `<sup class="footnote-ref">` + `<section class="footnotes">` HTML without surfacing an HTML card in the editor (needs a custom Lexical node + serializer).
-- **Dependency maintenance (track, do not schedule).** React 19 only when `@tryghost/koenig-lexical` compatibility is verified — Koenig is the largest surface and declares no React peer dependency. TypeScript 7 (the native `tsgo` compiler) once the Vite/plugin toolchain supports it; dev-only, no runtime risk, main benefit is faster typechecking.
 
 ---
 
@@ -177,86 +192,6 @@ as the `TAURI_SIGNING_PRIVATE_KEY` secret and in the maintainer's password manag
 
 | Version | Status | Scope |
 |---|---|---|
-| `v0.1.0` – `v0.4.0` | **Shipped** | Core editor, metadata sidebar, cards parity, theming, publishing/scheduling modal, newsletter safety gate, post visibility/tiers, revisions drawer |
-| `v0.5.0 Native` | **Shipped** | Full macOS design system, 3-pane rail, borderless canvas, Koenig retheme |
-| `v0.6.0 Auth` | **Shipped** | Password login in Rust, session cookie, 2FA verification code, Staff Access Token auto-retrieval, token rotation |
-| `v0.7.0 Scraps` | **Shipped** | Local-first private scratchpad in `tauri-plugin-store`, Promote to Draft, Demote to Scrap, zero server leakage |
-| `v0.8.0 Feature Complete` | **Shipped** | Offline draft cache (`draft_cache.json`), `offline` save status, offline editing from cached copies, automatic replay of dirty patches on reconnect |
-| `v0.8.1 Maintenance` | **Shipped** | Code review hardening: conflict overwrite preservation, scrap mode close guard, titlebar status mirror, promote idempotency, forget site cache purge |
-| `v1.0.0 General Availability` | **Shipped** | First official public release with DMG & signed updater artifacts, Windows/WebView2 build, `tauri-plugin-updater` with GitHub Releases |
-| `v1.1.0` | **Shipped / Current** | Editor refinements, bundled typography, WCAG AA contrast and focus management, offline/save reliability, security boundaries, CI checks and component tests |
-
-### Milestone detail
-
-**v0.1 – v0.4 (shipped).**
-v0.1: connect with a Staff Access Token, list/create drafts, Koenig editing with uploads and
-embeds, autosave + `Cmd+S` revisions, preview, web-only publish.
-v0.2: metadata sidebar (feature image, slug, excerpt, tags, authors, featured), search and
-filter, conflict/error UX, `tauri-plugin-store` site persistence, in-app preview window.
-v0.3: full `cardConfig` parity, full media upload parity, CSS token theming with
-system/dark/light, `MIN_GHOST`/`MAX_GHOST` policy.
-v0.4: publish & schedule modal, guarded newsletter sending, post visibility and paid tiers,
-revisions drawer with restore.
-
-**v0.5.0 Native (shipped).** Native macOS design system per `docs/design-system.md`: real
-vibrancy shell, native menu bar wiring, three-pane layout (rail / list / inspector),
-borderless distraction-free editor canvas, and a Koenig typography and dark-mode retheme
-driven entirely by CSS tokens.
-
-**v0.6.0 Auth (shipped).** Password login executed in Rust: `POST /session/` with the site's own
-`Origin`, session cookie held in Rust only, 2FA verification via `PUT /session/verify/`,
-automatic Staff Access Token retrieval via `GET /users/me/token/`, and token rotation. The
-password is never persisted; the cookie is discarded once a token is obtained.
-
-**v0.7.0 Scraps (shipped).** A local-first private scratchpad stored purely in
-`tauri-plugin-store` (`scraps.json`, keyed per publication) — offline, instant, never
-uploaded and never visible to other publication staff. **Promote to Draft** creates a
-Ghost draft from a scrap and opens it in the editor. **Demote to Scrap** backs up a draft
-locally, confirms, then deletes the server copy, and only accepts posts still in `draft`
-status. Scraps live in `NavigationRail` with local search, word count and last-edited
-timestamps.
-
-**v0.8.0 Feature Complete (shipped).** Offline resilience. Every opened post is written
-to a local draft cache (`draft_cache.json` through `tauri-plugin-store`, keyed per
-publication), so it can be reopened and edited offline from the cached copy. When a save
-fails because the request never reached Ghost, the single-flight saver preserves the
-pending patch, reports `status: "offline"`, and persists it with the cached draft.
-Dirty patches are replayed automatically when the connection returns (`online` event);
-a `409` still halts the saver. This completes the feature set.
-
-**v0.8.1 Maintenance (shipped).** Edge-case hardening from wide-level code review: dirty
-state typed during 409 collisions is preserved on overwrite; scrap mode prompts and
-flushes on window close requests; titlebar save status mirrors local scraps; promote-to-draft
-reuses existing drafts across retries to prevent duplicate Ghost posts; forgetting a site
-purges its cached drafts and scraps from disk; and opener actions catch unhandled rejections.
-
-**v1.0.0 GA (shipped).** First official public release. macOS bundles are ad-hoc signed
-(`bundle.macOS.signingIdentity: "-"`) but not notarized yet, so first launch shows the
-Gatekeeper "unverified developer" prompt (right-click → Open, or the
-`xattr -dr com.apple.quarantine` workaround). Bundles ship as a DMG plus a signed updater
-archive; Windows builds use WebView2. `tauri-plugin-updater` reads `latest.json` from
-GitHub Releases and `tauri-plugin-process` restarts the app after an in-place install.
-Releases are built by `.github/workflows/release.yml` on a `v*` tag and stay drafts
-until verified. See [`releasing.md`](./releasing.md).
-
-**v1.1.0 (current).** Removed the editor "Begin writing…" placeholder, wrapped
-post titles across multiple lines in an auto-growing field, and widened the native
-reading measure from 740px to 780px. Bundled Inter, Lora, and JetBrains Mono
-(variable, upright + italic, OFL), added a body-font preference, and enabled typewriter
-scrolling to keep the active line centered. Moved focus mode to `Cmd+Shift+F`,
-made `Cmd+\` a dedicated navigation-rail toggle, and styled the titlebar and editor
-header to share the canvas background in focus mode. Raised text contrast to WCAG
-AA in both themes (fixing publish action and body links from 2.08:1), added visible
-`:focus-visible` rings, added Escape dismiss, focus restore, and focus traps for the
-inspector, revisions drawer, and token-rotation dialog, and added a scrim for the
-overlay rail below 1120px. Fixed window-close "Cancel" destroying the window and
-discarding unsaved work, remounted the editor on post switches, blocked publish if
-the latest edits failed to save, opened dirty offline drafts with local edits visible,
-capped the draft cache at 50 per site with dirty drafts never evicted, and prevented
-secondary metadata loaders from raising unhandled rejections. Added a
-Content-Security-Policy that blocks remote script execution, narrowed the opener
-capability to `allow-open-url`, normalized Keychain account keys, bounded admin JWT
-timestamp arithmetic, and added request timeouts. Configured CI to run `cargo clippy
--D warnings` and `cargo fmt --check`, set the release workflow to fail fast if the
-git tag does not match the manifest versions, and added jsdom + React Testing
-Library with the first component tests (`PublishModal`, close-guard).
+| `v0.1.0` | **Shipped** | Initial Tauri v2 + Ghost Admin API foundation: Keychain JWT minting, single-flight saver, metadata sidebar, publish & schedule sheet with newsletter recipient gate, revisions drawer, native macOS vibrancy shell, email/password + 2FA login, local Scraps, and offline draft cache |
+| `v0.2.0` | **Shipped** | Custom Markdown-first Lexical editor (`LexicalLabEditor`) promoted to primary default engine with 22-card Ghost parity (`GhostCardNode`), `/` slash menu, `[^1]` inline footnotes + bottom drawer (`footnoteSerializer`), `⌘K` / `[[` internal post linking, media drag-and-drop, `TK` badges, Focus Mode paragraph dimming, and `⌥⌘E` Koenig toggle |
+| `v0.2.1` | **Current** | Public repository polish, documentation overhaul, and privacy scrubbing for the `0.2.1` release |

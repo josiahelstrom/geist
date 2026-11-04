@@ -1,9 +1,8 @@
-# Geist Design System — v1.1.0
+# Geist Design System — v0.2.1
 
-> **Phase 0 specification.** This document is the source of truth for the v0.5.0 Native
-> redesign. It fixes the tokens, metrics, materials, typography, and component contracts
-> before any CSS is written. Where this document and an implementation disagree, the
-> implementation is wrong.
+> **Specification.** This document is the source of truth for the Geist `v0.2.1` native
+> design system. It fixes the tokens, metrics, materials, typography, and component contracts.
+> Where this document and an implementation disagree, the implementation is wrong.
 >
 > Reference inputs:
 > - Ghost 6.68 Admin and Editor — `docs/ref/Ghost Admin Panel.png`,

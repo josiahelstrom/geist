@@ -46,8 +46,8 @@ const {
 } = await import("./sites");
 
 const SAMPLE_SITE: Site = {
-	base: "https://everywayhuman.com",
-	siteUrl: "https://everywayhuman.com/",
+	base: "https://example.com",
+	siteUrl: "https://example.com/",
 	title: "every way human",
 	version: "6.68",
 	keyKind: "staff",

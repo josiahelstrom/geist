@@ -49,9 +49,9 @@ fn allowed(raw: &str) -> bool {
 #[test]
 fn scope_allows_real_ghost_urls() {
     let should_pass = [
-        "https://everywayhuman.com/ghost/api/admin/site/",
-        "https://everywayhuman.com/ghost/api/admin/posts/?filter=status:draft",
-        "https://everywayhuman.com/ghost/api/admin/images/upload/",
+        "https://example.com/ghost/api/admin/site/",
+        "https://example.com/ghost/api/admin/posts/?filter=status:draft",
+        "https://example.com/ghost/api/admin/images/upload/",
         "http://localhost:2368/ghost/api/admin/site/",
         "http://127.0.0.1:2368/ghost/api/admin/posts/",
     ];
@@ -89,7 +89,7 @@ fn scope_blocks_bare_http_on_public_hosts() {
     // the Admin API key never crosses the wire in clear text.
     for url in [
         "http://example.com/ghost/api/admin/site/",
-        "http://everywayhuman.com/ghost/api/admin/site/",
+        "http://example.com/ghost/api/admin/site/",
     ] {
         assert!(!allowed(url), "scope should NOT allow {url}");
     }

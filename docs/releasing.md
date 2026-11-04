@@ -8,7 +8,7 @@ afterwards.
 The updater signing key was generated once:
 
 ```bash
-npm run tauri signer generate -- -w ~/.tauri/geist.key --ci -p ""
+pnpm tauri signer generate -- -w ~/.tauri/geist.key --ci -p ""
 ```
 
 - Private key: `~/.tauri/geist.key` (never commit it, never share it).
@@ -52,7 +52,7 @@ below.
 To produce a signed local build with the same key:
 
 ```bash
-TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/geist.key" npm run tauri build
+TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/geist.key" pnpm tauri build
 ```
 
 For `build` and `bundle`, `TAURI_SIGNING_PRIVATE_KEY` accepts either the key itself or
@@ -70,9 +70,9 @@ that value, and in CI the release workflow sets it when the `APPLE_CERTIFICATE`
 secret exists, which produces a real Developer ID signature. Without those
 variables the build is still signed for the updater, but not for Apple.
 
-### Unsigned / ad-hoc release candidate
+### Unsigned / ad-hoc builds
 
-`v1.0.0-rc.1` was built before a Developer ID certificate was provisioned, so its
+Current releases (`v0.2.1`) are built before a Developer ID certificate is provisioned, so their
 artifacts are ad-hoc signed and not notarized. They are installable, but:
 
 - Gatekeeper prompts on first launch with "Apple could not verify ...". This is
@@ -88,17 +88,17 @@ artifacts are ad-hoc signed and not notarized. They are installable, but:
 
 - **Installed apps will not receive future updates unless the same signing
   identity is preserved.** An ad-hoc signature gives the bundle no stable code
-  identity, so an app installed from this RC cannot update in place to a build
-  signed with a different identity. GA must therefore be signed with a real
-  Developer ID certificate (`APPLE_CERTIFICATE` + `APPLE_SIGNING_IDENTITY`) so
-  existing users update rather than reinstall by hand.
+  identity, so an app installed from an ad-hoc build cannot update in place to a build
+  signed with a different identity. Future notarized releases signed with a real
+  Developer ID certificate (`APPLE_CERTIFICATE` + `APPLE_SIGNING_IDENTITY`) will allow
+  existing users to update rather than reinstall by hand.
 
 To correct a broken artifact, delete the tag and the draft release assets, then
 publish again from a fixed commit:
 
 ```bash
-git tag -d v1.0.0-rc.1
-git push origin :refs/tags/v1.0.0-rc.1
+git tag -d v0.2.1
+git push origin :refs/tags/v0.2.1
 ```
 
 Delete the draft release (or its stale assets) on GitHub before re-running the
@@ -117,8 +117,8 @@ release can serve mismatched artifacts and `latest.json` signatures.
 2. Commit, then tag and push:
 
    ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
+   git tag v0.2.1
+   git push origin v0.2.1
    ```
 
 3. The tag triggers `.github/workflows/release.yml`, which builds
@@ -166,11 +166,11 @@ prereleases.
 
 ## Homebrew
 
-Once `v1.0.0` is out, a cask will live in a personal tap:
+A cask template for a personal tap:
 
 ```ruby
 cask "geist" do
-  version "1.0.0"
+  version "0.2.1"
   sha256 "<sha256 of the released dmg>"
 
   url "https://github.com/josiahelstrom/geist/releases/download/v#{version}/Geist_#{version}_aarch64.dmg"
@@ -183,6 +183,5 @@ end
 ```
 
 Replace `sha256` with the checksum of the published DMG
-(`shasum -a 256 Geist_1.0.0_aarch64.dmg`). During the RC there is no cask; install
-from the published RC release instead. The RC `.dmg` is published as a normal
-release, not a prerelease, so update delivery works during the RC cycle.
+(`shasum -a 256 Geist_0.2.1_aarch64.dmg`). The `.dmg` is published as a normal
+release, not a prerelease, so update delivery works via `releases/latest`.

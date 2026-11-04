@@ -817,7 +817,7 @@ mod tests {
     #[test]
     fn preview_url_allows_https_and_loopback_http() {
         assert!(
-            validate_preview_url("https://everywayhuman.com/p/1234/?member_status=free").is_ok()
+            validate_preview_url("https://example.com/p/1234/?member_status=free").is_ok()
         );
         assert!(validate_preview_url("http://localhost:2368/p/1234/").is_ok());
         assert!(validate_preview_url("http://127.0.0.1:2368/p/1234/?member_status=paid").is_ok());
@@ -830,7 +830,7 @@ mod tests {
             "data:text/html,<script>alert(1)</script>",
             "file:///etc/passwd",
             "tauri://localhost/index.html",
-            "http://everywayhuman.com/p/1234/",
+            "http://example.com/p/1234/",
         ] {
             assert!(
                 validate_preview_url(bad).is_err(),

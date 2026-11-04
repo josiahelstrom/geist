@@ -36,8 +36,8 @@ type FakeUpdate = {
 
 function fakeUpdate(overrides: Partial<FakeUpdate> = {}): FakeUpdate {
 	return {
-		version: "1.0.0",
-		currentVersion: "1.0.0-rc.1",
+		version: "0.2.1",
+		currentVersion: "0.2.0",
 		downloadAndInstall: vi.fn().mockResolvedValue(undefined),
 		...overrides,
 	};
@@ -71,16 +71,16 @@ describe("update checks", () => {
 		enableTauri();
 		updaterMock.check.mockResolvedValue(
 			fakeUpdate({
-				version: "1.0.0-rc.2",
-				currentVersion: "1.0.0-rc.1",
+				version: "0.2.1",
+				currentVersion: "0.2.0",
 				date: "2026-10-30T00:00:00Z",
 				body: "Fixes the updater.",
 			}),
 		);
 
 		await expect(checkForUpdate()).resolves.toEqual({
-			version: "1.0.0-rc.2",
-			currentVersion: "1.0.0-rc.1",
+			version: "0.2.1",
+			currentVersion: "0.2.0",
 			date: "2026-10-30T00:00:00Z",
 			body: "Fixes the updater.",
 		});

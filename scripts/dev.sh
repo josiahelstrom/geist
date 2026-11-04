@@ -12,7 +12,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-IDENTITY="${GEIST_SIGN_IDENTITY:-Apple Development: josiahelstrom@icloud.com (58ZQDQFV4C)}"
+IDENTITY="${GEIST_SIGN_IDENTITY:--}"
 BIN="src-tauri/target/debug/geist"
 VITE_PID=""
 
@@ -21,9 +21,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if ! security find-identity -v -p codesigning | grep -qF "$IDENTITY"; then
+if [ "$IDENTITY" != "-" ] && ! security find-identity -v -p codesigning | grep -qF "$IDENTITY"; then
     echo "error: signing identity not found: $IDENTITY" >&2
-    echo "Set GEIST_SIGN_IDENTITY, or run 'security find-identity -v -p codesigning'." >&2
+    echo "Set GEIST_SIGN_IDENTITY (defaults to '-' ad-hoc), or run 'security find-identity -v -p codesigning'." >&2
     exit 1
 fi
 

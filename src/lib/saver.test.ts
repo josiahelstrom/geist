@@ -38,8 +38,8 @@ vi.mock("@tauri-apps/plugin-http", () => ({
 const {createSaver} = await import("./saver");
 
 const SITE: Site = {
-	base: "https://everywayhuman.com",
-	siteUrl: "https://everywayhuman.com/",
+	base: "https://example.com",
+	siteUrl: "https://example.com/",
 	title: "every way human",
 	version: "6.68",
 	keyKind: "staff",
@@ -66,7 +66,7 @@ describe("saver safety rules", () => {
 		expect(body.posts[0]).not.toHaveProperty("html");
 		expect(puts[0].url).not.toContain("source=html");
 		expect(puts[0].url).toBe(
-			"https://everywayhuman.com/ghost/api/admin/posts/p1/",
+			"https://example.com/ghost/api/admin/posts/p1/",
 		);
 	});
 
