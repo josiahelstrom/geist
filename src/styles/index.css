@@ -2,9 +2,7 @@
  * Geist style entry point.
  *
  * tokens -> base -> chrome -> sidebar -> editor canvas -> inspector -> sheet
- * -> connect -> Koenig retheme. App.css is still imported after this file in
- * main.tsx, so rules that need to win use doubled selectors (see editor.css,
- * inspector.css, modal.css and connect.css).
+ * -> connect -> Koenig retheme.
  */
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/inter/wght-italic.css";

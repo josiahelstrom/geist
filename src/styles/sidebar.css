@@ -323,10 +323,6 @@
 	background: var(--fg-muted);
 }
 
-.rail-dot-muted {
-	background: var(--fg-muted);
-}
-
 /* Footer ------------------------------------------------------------------------- */
 
 .rail-footer {

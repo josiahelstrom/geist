@@ -2,12 +2,10 @@
  * Connect screen — v0.6.0 password sign-in and Staff Access Token fallback.
  *
  * Source of truth: docs/design-system.md §4.6 (sheet controls, segmented
- * toggles) and §5 (appearance matrix). App.css is loaded after this file, so
- * element selectors are scoped under `.connect` and the legacy shell uses a
- * doubled class to win the cascade.
+ * toggles) and §5 (appearance matrix).
  */
 
-.connect.connect-screen {
+.connect-screen {
 	position: relative;
 	display: flex;
 	align-items: center;
@@ -377,7 +375,15 @@
 	margin-bottom: var(--space-2);
 }
 
+.connect .site-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
 .connect .site-list li {
+	display: flex;
+	align-items: center;
 	gap: var(--space-2);
 	padding: var(--space-2) 0;
 	border-top: 1px solid var(--border-subtle);
@@ -393,6 +399,11 @@
 }
 
 .connect .site-open {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	min-width: 0;
 	gap: 2px;
 	padding: 0;
 	border: 0;
@@ -414,9 +425,9 @@
 .connect .site-open .warn {
 	padding: 2px 6px;
 	border-radius: var(--radius-sm);
-	background: color-mix(in srgb, var(--status-danger) 8%, transparent);
-	border-color: color-mix(in srgb, var(--status-danger) 24%, transparent);
-	color: var(--status-danger);
+	background: rgba(245, 11, 35, 0.08);
+	border: 1px solid rgba(245, 11, 35, 0.28);
+	color: var(--fg-primary);
 	font-size: 11px;
 }
 
@@ -465,7 +476,7 @@
 	color: var(--fg-secondary);
 }
 
-.inspector.inspector button.inspector-account-button {
+.inspector button.inspector-account-button {
 	width: 100%;
 	height: var(--control-height-compact);
 	margin-top: var(--space-2);

@@ -2,15 +2,14 @@
  * Right inspector drawer — MetadataSidebar and RevisionsDrawer.
  *
  * Source of truth: docs/design-system.md §4.6 (drawer shell, disclosure
- * sections, revision rows) and §5 (appearance matrix). App.css is loaded after
- * this file, so interactive rules are doubled where they must win the cascade.
+ * sections, revision rows) and §5 (appearance matrix).
  */
 
 /* ---------------------------------------------------------------------------
  * Shell
  * ------------------------------------------------------------------------- */
 
-.inspector.inspector {
+.inspector {
 	--inspector-fg-hint: #657483;
 	display: flex;
 	flex-direction: column;
@@ -33,7 +32,7 @@
 	animation: inspector-slide-in var(--motion-duration) var(--motion-ease);
 }
 
-html.dark .inspector.inspector {
+html.dark .inspector {
 	--inspector-fg-hint: var(--fg-secondary);
 }
 
@@ -42,11 +41,11 @@ html.dark .inspector.inspector {
 }
 
 /* Give the revisions panel the extra 20px it needs inside the shell grid. */
-.editor-shell.editor-shell.with-sidebar:has(.revisions-drawer) {
+.editor-shell.with-sidebar:has(.revisions-drawer) {
 	grid-template-columns: minmax(0, 1fr) 340px;
 }
 
-.editor-shell.editor-shell.with-sidebar:has(.revisions-drawer)
+.editor-shell.with-sidebar:has(.revisions-drawer)
 	.editor-word-count.with-sidebar {
 	right: calc(340px + var(--space-5));
 }
@@ -100,7 +99,7 @@ html.dark .inspector.inspector {
 	border-bottom: 1px solid var(--border-subtle);
 }
 
-.inspector.inspector button.inspector-disclosure {
+.inspector button.inspector-disclosure {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -117,7 +116,7 @@ html.dark .inspector.inspector {
 	text-align: left;
 }
 
-.inspector.inspector button.inspector-disclosure:hover:not(:disabled) {
+.inspector button.inspector-disclosure:hover:not(:disabled) {
 	background: transparent;
 }
 
@@ -202,9 +201,9 @@ html.dark .inspector.inspector {
  * Fields & controls — 28px compact, 32px standard (§4.6)
  * ------------------------------------------------------------------------- */
 
-.inspector.inspector .inspector-input,
-.inspector.inspector .inspector-select,
-.inspector.inspector .inspector-textarea {
+.inspector .inspector-input,
+.inspector .inspector-select,
+.inspector .inspector-textarea {
 	width: 100%;
 	box-sizing: border-box;
 	background: var(--bg-canvas);
@@ -217,45 +216,45 @@ html.dark .inspector.inspector {
 		box-shadow var(--motion-duration) var(--motion-ease);
 }
 
-.inspector.inspector .inspector-input,
-.inspector.inspector .inspector-select {
+.inspector .inspector-input,
+.inspector .inspector-select {
 	height: var(--control-height-compact);
 	padding: 0 var(--space-2);
 }
 
-.inspector.inspector .inspector-select {
+.inspector .inspector-select {
 	padding-right: var(--space-1);
 }
 
-.inspector.inspector .inspector-textarea {
+.inspector .inspector-textarea {
 	min-height: 64px;
 	padding: 6px var(--space-2);
 	resize: vertical;
 }
 
-.inspector.inspector .inspector-input::placeholder,
-.inspector.inspector .inspector-textarea::placeholder {
+.inspector .inspector-input::placeholder,
+.inspector .inspector-textarea::placeholder {
 	color: var(--fg-tertiary);
 	opacity: 1;
 }
 
-.inspector.inspector .inspector-input:focus,
-.inspector.inspector .inspector-select:focus,
-.inspector.inspector .inspector-textarea:focus {
+.inspector .inspector-input:focus,
+.inspector .inspector-select:focus,
+.inspector .inspector-textarea:focus {
 	outline: none;
 	border-color: var(--fg-muted);
 }
 
-.inspector.inspector .inspector-input:focus-visible,
-.inspector.inspector .inspector-select:focus-visible,
-.inspector.inspector .inspector-textarea:focus-visible {
+.inspector .inspector-input:focus-visible,
+.inspector .inspector-select:focus-visible,
+.inspector .inspector-textarea:focus-visible {
 	outline: 2px solid var(--border-strong);
 	outline-offset: 1px;
 }
 
-.inspector.inspector .inspector-input:disabled,
-.inspector.inspector .inspector-select:disabled,
-.inspector.inspector .inspector-textarea:disabled {
+.inspector .inspector-input:disabled,
+.inspector .inspector-select:disabled,
+.inspector .inspector-textarea:disabled {
 	opacity: 0.55;
 	cursor: default;
 }
@@ -264,7 +263,7 @@ html.dark .inspector.inspector {
  * Buttons
  * ------------------------------------------------------------------------- */
 
-.inspector.inspector button {
+.inspector button {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -284,25 +283,25 @@ html.dark .inspector.inspector {
 		transform 50ms ease;
 }
 
-.inspector.inspector button:hover:not(:disabled) {
+.inspector button:hover:not(:disabled) {
 	background: var(--bg-row-hover);
 }
 
-.inspector.inspector button:active:not(:disabled) {
+.inspector button:active:not(:disabled) {
 	transform: scale(0.985);
 }
 
-.inspector.inspector button:disabled {
+.inspector button:disabled {
 	opacity: 0.5;
 	cursor: default;
 }
 
-.inspector.inspector button:focus-visible {
+.inspector button:focus-visible {
 	outline: 2px solid var(--border-strong);
 	outline-offset: 1px;
 }
 
-.inspector.inspector button.inspector-close {
+.inspector button.inspector-close {
 	width: var(--control-height-compact);
 	height: var(--control-height-compact);
 	min-height: var(--control-height-compact);
@@ -314,22 +313,22 @@ html.dark .inspector.inspector {
 	font-size: 13px;
 }
 
-.inspector.inspector button.inspector-close:hover:not(:disabled) {
+.inspector button.inspector-close:hover:not(:disabled) {
 	background: var(--bg-row-selected);
 	color: var(--fg-primary);
 }
 
-.inspector.inspector button.inspector-secondary-button {
+.inspector button.inspector-secondary-button {
 	background: var(--bg-canvas);
 	border-color: var(--border-default);
 	color: var(--fg-primary);
 }
 
-.inspector.inspector button.inspector-secondary-button:hover:not(:disabled) {
+.inspector button.inspector-secondary-button:hover:not(:disabled) {
 	background: var(--bg-row-hover);
 }
 
-.inspector.inspector button.inspector-primary-button {
+.inspector button.inspector-primary-button {
 	height: var(--control-height);
 	background: var(--accent-primary-bg);
 	border-color: var(--accent-primary-bg);
@@ -337,22 +336,22 @@ html.dark .inspector.inspector {
 	font-weight: 500;
 }
 
-.inspector.inspector button.inspector-primary-button:hover:not(:disabled) {
+.inspector button.inspector-primary-button:hover:not(:disabled) {
 	opacity: 0.9;
 	background: var(--accent-primary-bg);
 }
 
-.inspector.inspector button.inspector-danger-button {
+.inspector button.inspector-danger-button {
 	background: transparent;
 	border-color: rgba(245, 11, 35, 0.3);
 	color: var(--status-danger);
 }
 
-.inspector.inspector button.inspector-danger-button:hover:not(:disabled) {
+.inspector button.inspector-danger-button:hover:not(:disabled) {
 	background: rgba(245, 11, 35, 0.1);
 }
 
-.inspector.inspector button.inspector-upload {
+.inspector button.inspector-upload {
 	width: 100%;
 	height: 64px;
 	border-style: dashed;
@@ -362,7 +361,7 @@ html.dark .inspector.inspector {
 	font-size: 12px;
 }
 
-.inspector.inspector button.inspector-upload:hover:not(:disabled) {
+.inspector button.inspector-upload:hover:not(:disabled) {
 	background: var(--bg-row-hover);
 	color: var(--fg-primary);
 }
@@ -483,7 +482,7 @@ html.dark .inspector.inspector {
 	color: var(--fg-primary);
 }
 
-.inspector.inspector button.inspector-chip-remove {
+.inspector button.inspector-chip-remove {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -499,7 +498,7 @@ html.dark .inspector.inspector {
 	line-height: 1;
 }
 
-.inspector.inspector button.inspector-chip-remove:hover:not(:disabled) {
+.inspector button.inspector-chip-remove:hover:not(:disabled) {
 	background: var(--border-default);
 	color: var(--fg-primary);
 }
@@ -545,7 +544,7 @@ html.dark .inspector.inspector {
 	border-top: 1px solid var(--border-subtle);
 }
 
-.inspector.inspector button.inspector-footer-button {
+.inspector button.inspector-footer-button {
 	justify-content: flex-start;
 	width: 100%;
 	height: var(--control-height);
@@ -574,7 +573,7 @@ html.dark .inspector.inspector {
 	padding: var(--space-2);
 }
 
-.inspector.inspector button.revision-row {
+.inspector button.revision-row {
 	position: relative;
 	display: flex;
 	align-items: flex-start;
@@ -591,7 +590,7 @@ html.dark .inspector.inspector {
 	overflow: hidden;
 }
 
-.inspector.inspector button.revision-row::before {
+.inspector button.revision-row::before {
 	content: "";
 	position: absolute;
 	top: 6px;
@@ -604,16 +603,16 @@ html.dark .inspector.inspector {
 	transition: opacity var(--motion-duration) var(--motion-ease);
 }
 
-.inspector.inspector button.revision-row:hover:not(:disabled) {
+.inspector button.revision-row:hover:not(:disabled) {
 	background: var(--bg-row-hover);
 }
 
-.inspector.inspector button.revision-row.is-selected {
+.inspector button.revision-row.is-selected {
 	background: var(--bg-row-selected);
 	border-color: var(--border-default);
 }
 
-.inspector.inspector button.revision-row.is-selected::before {
+.inspector button.revision-row.is-selected::before {
 	opacity: 1;
 }
 
@@ -757,7 +756,7 @@ html.dark .inspector .revision-badge.is-published {
 	overflow-wrap: anywhere;
 }
 
-.inspector.inspector button.revision-restore-button {
+.inspector button.revision-restore-button {
 	width: 100%;
 	margin-top: var(--space-1);
 }
@@ -767,7 +766,7 @@ html.dark .inspector .revision-badge.is-published {
  * ------------------------------------------------------------------------- */
 
 @media (prefers-reduced-transparency: reduce) {
-	.inspector.inspector,
+	.inspector,
 	.inspector .inspector-header {
 		background: var(--bg-sidebar-solid);
 	}

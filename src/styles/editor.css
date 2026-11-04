@@ -2,16 +2,14 @@
  * Editor canvas — docs/design-system.md §3.3 and §4.5.
  *
  * A borderless, full-bleed writing surface: floating chrome, a single 780px
- * measure, and no card, border, or header panel around the document. All
- * legacy App.css rules are overridden by doubled class selectors because
- * App.css is still imported after this file (see index.css).
+ * measure, and no card, border, or header panel around the document.
  */
 
 /* ---------------------------------------------------------------------------
  * Shell & canvas
  * ------------------------------------------------------------------------- */
 
-.editor-shell.editor-shell {
+.editor-shell {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
 	min-height: 100%;
@@ -19,7 +17,7 @@
 	color: var(--fg-primary);
 }
 
-.editor-shell.editor-shell.with-sidebar {
+.editor-shell.with-sidebar {
 	grid-template-columns: minmax(0, 1fr) var(--inspector-width);
 }
 
@@ -28,8 +26,8 @@
 	width: 100%;
 }
 
-.editor-shell.editor-shell > .editor,
-.editor.editor {
+.editor-shell > .editor,
+.editor {
 	position: relative;
 	display: flex;
 	flex-direction: column;
@@ -41,6 +39,16 @@
 	box-sizing: border-box;
 	background: var(--bg-canvas);
 	color: var(--fg-primary);
+}
+
+.editor .muted {
+	color: var(--fg-secondary);
+	font-size: 13px;
+}
+
+.editor .koenig-lexical {
+	transform: translateZ(0);
+	will-change: transform;
 }
 
 /* The measure: min(780px, 100% - 48px), centered. */
@@ -73,11 +81,7 @@
 	margin: 0;
 	padding: 0 var(--space-5);
 	box-sizing: border-box;
-	background: linear-gradient(
-		to bottom,
-		var(--bg-canvas) 55%,
-		transparent 100%
-	);
+	background: var(--bg-canvas);
 }
 
 .editor-topbar-left {
@@ -129,6 +133,14 @@
 .editor-breadcrumb .status-conflict,
 .editor-breadcrumb .status-error {
 	color: var(--status-danger);
+}
+
+.editor-breadcrumb .status-dirty {
+	color: var(--status-draft);
+}
+
+.editor-breadcrumb .status-saving {
+	color: var(--fg-secondary);
 }
 
 .editor-breadcrumb-sep {
@@ -212,7 +224,6 @@
 	color: var(--status-publish);
 }
 
-:root:not(.dark) .editor-shell .editor-action-publish,
 html:not(.dark) .editor-shell .editor-action-publish {
 	background: var(--accent-primary-bg);
 	color: var(--accent-primary-fg);
@@ -221,7 +232,6 @@ html:not(.dark) .editor-shell .editor-action-publish {
 	padding: 0 10px;
 }
 
-:root:not(.dark) .editor-shell .editor-action-publish:hover:not(:disabled),
 html:not(.dark) .editor-shell .editor-action-publish:hover:not(:disabled) {
 	background: var(--accent-primary-bg);
 	color: var(--accent-primary-fg);
@@ -451,12 +461,12 @@ html:not(.dark) .editor-shell .editor-action-publish:hover:not(:disabled) {
  * untouched, so exiting focus mode restores whatever was open.
  * ------------------------------------------------------------------------- */
 
-.app-shell[data-focus="on"] .editor-shell.editor-shell,
-.app-shell[data-focus="on"] .editor-shell.editor-shell.with-sidebar {
+.app-shell[data-focus="on"] .editor-shell,
+.app-shell[data-focus="on"] .editor-shell.with-sidebar {
 	grid-template-columns: minmax(0, 1fr);
 }
 
-.app-shell[data-focus="on"] .inspector.inspector {
+.app-shell[data-focus="on"] .inspector {
 	display: none;
 }
 
@@ -477,8 +487,8 @@ html:not(.dark) .editor-shell .editor-action-publish:hover:not(:disabled) {
  * over the bare canvas while focused. */
 .app-shell[data-focus="on"] .editor-word-count,
 .app-shell[data-focus="on"]
-	.editor-shell.editor-shell
-	.editor-word-count.editor-word-count.with-sidebar {
+	.editor-shell
+	.editor-word-count.with-sidebar {
 	right: var(--space-5);
 	border-color: transparent;
 	background: transparent;

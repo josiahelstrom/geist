@@ -2,8 +2,7 @@
  * Publish sheet — docs/design-system.md §4.6 (macOS sheet, segmented delivery,
  * mandatory newsletter recipient-count gate) and §5 (appearance matrix).
  *
- * App.css is loaded after this file, so sheet rules that have to beat legacy
- * element selectors are scoped under `.publish-sheet` / `.sheet-backdrop`.
+ * Sheet rules are scoped under `.publish-sheet` / `.sheet-backdrop`.
  */
 
 :root {
@@ -336,7 +335,7 @@
  * Newsletter gate (recipient count + explicit confirmation)
  * ------------------------------------------------------------------------- */
 
-.publish-sheet .warn-banner.sheet-warn {
+.publish-sheet .sheet-warn {
 	display: flex;
 	align-items: flex-start;
 	justify-content: space-between;
@@ -373,7 +372,7 @@
 	text-align: right;
 }
 
-.publish-sheet .confirm-send.sheet-confirm {
+.publish-sheet .sheet-confirm {
 	display: flex;
 	align-items: flex-start;
 	gap: var(--space-2);

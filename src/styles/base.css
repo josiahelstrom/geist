@@ -1,8 +1,7 @@
 /*
  * Geist base layer — the reset and platform defaults for the macOS webview.
  *
- * Loaded before App.css so legacy rules keep winning where they overlap
- * (docs/design-system.md §4.7, §5).
+ * Reset and platform defaults (docs/design-system.md §4.7, §5).
  */
 
 *,
@@ -124,7 +123,6 @@ canvas {
 }
 
 /* Reserve the 68×14 traffic lights. Nothing interactive may sit here. */
-.window-controls-gutter,
 .traffic-light-gutter {
 	position: absolute;
 	top: 0;
@@ -162,8 +160,91 @@ a[href] {
 /* Reduced transparency (§5): glass surfaces go solid and lose their blur. */
 @media (prefers-reduced-transparency: reduce) {
 	.glass-pill,
-	.sidebar-card,
 	.sheet-backdrop {
 		backdrop-filter: none;
 	}
+}
+
+/* ---------------------------------------------------------------------------
+ * Utility & banners
+ * ------------------------------------------------------------------------- */
+
+.truncate {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.warn-banner,
+.error-banner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	flex-wrap: wrap;
+	border-radius: var(--radius-md);
+	padding: var(--space-2) var(--space-3);
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.warn-banner {
+	border: 1px solid rgba(217, 119, 6, 0.28);
+	background: rgba(245, 158, 11, 0.1);
+	color: var(--fg-primary);
+}
+
+.error-banner {
+	border: 1px solid rgba(245, 11, 35, 0.3);
+	background: rgba(245, 11, 35, 0.1);
+	color: var(--fg-primary);
+}
+
+.banner-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex-wrap: wrap;
+}
+
+.banner-actions button,
+.warn-banner button,
+.error-banner button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	height: var(--control-height-compact);
+	padding: 0 var(--space-3);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-md);
+	background: var(--bg-canvas);
+	color: var(--fg-primary);
+	font-family: var(--font-sans);
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 1;
+	cursor: pointer;
+	transition:
+		background-color var(--motion-duration) var(--motion-ease),
+		border-color var(--motion-duration) var(--motion-ease);
+}
+
+.banner-actions button:hover:not(:disabled),
+.warn-banner button:hover:not(:disabled),
+.error-banner button:hover:not(:disabled) {
+	background: var(--bg-row-hover);
+}
+
+.banner-actions button:disabled,
+.warn-banner button:disabled,
+.error-banner button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.banner-actions button:focus-visible,
+.warn-banner button:focus-visible,
+.error-banner button:focus-visible {
+	outline: 2px solid var(--border-strong);
+	outline-offset: 1px;
 }
